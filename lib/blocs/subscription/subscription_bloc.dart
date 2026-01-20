@@ -29,7 +29,6 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     on<SubscriptionDeleted>(_onDeleted);
     on<SubscriptionDeleteAllRequested>(_onDeleteAllRequested);
     on<SubscriptionSyncProgressUpdated>(_onSyncProgressUpdated);
-    on<TransactionSyncRequested>(_onTransactionSyncRequested);
   }
 
   Future<void> _onLoadRequested(
@@ -60,7 +59,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     SubscriptionSyncRequested event,
     Emitter<SubscriptionState> emit,
   ) async {
-    debugPrint('[SubscriptionBloc] Starting sync...');
+    debugPrint('[SubscriptionBloc] Starting SMS sync...');
     emit(state.copyWith(
       isSyncing: true,
       syncProgress: const SyncProgress(status: 'Авторизация...'),
@@ -81,89 +80,93 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       debugPrint('[SubscriptionBloc] Auth successful, initializing Gmail...');
       await _gmailService.init(authClient);
 
-      debugPrint('[SubscriptionBloc] Searching emails...');
-      final emails = await _gmailService.searchSubscriptionEmails(
-        batchSize: 10,
-        maxTotal: 50,
+      // Search for SMS emails forwarded from phone
+      debugPrint('[SubscriptionBloc] Searching for SMS emails...');
+      emit(state.copyWith(
+        syncProgress: const SyncProgress(status: 'Поиск SMS писем...'),
+      ));
+
+      final smsEmails = await _gmailService.searchSmsEmails(
+        subjectPrefix: 'RAIFEISEN',
+        maxResults: 500,
         onProgress: (progress) {
           add(SubscriptionSyncProgressUpdated(progress));
         },
       );
 
-      debugPrint('[SubscriptionBloc] Found ${emails.length} emails, parsing in isolates...');
-
-      // Clear all existing subscriptions before sync
-      await _databaseService.deleteAllSubscriptions();
-      debugPrint('[SubscriptionBloc] Cleared existing subscriptions');
+      debugPrint('[SubscriptionBloc] Found ${smsEmails.length} SMS emails');
 
       emit(state.copyWith(
         syncProgress: SyncProgress(
-          totalFound: emails.length,
+          totalFound: smsEmails.length,
           processed: 0,
-          status: 'Анализ ${emails.length} писем...',
+          status: 'Обработка ${smsEmails.length} SMS...',
         ),
       ));
 
-      // Convert emails to simple format for isolate
-      final simpleEmails = emails.map(GmailService.toSimple).toList();
+      // Parse SMS emails and save transactions
+      int newTransactions = 0;
+      int processed = 0;
 
-      // Process in batches using isolates
-      const batchSize = 10;
-      final allResults = <ParsedEmailResult>[];
-      int processedCount = 0;
+      for (final email in smsEmails) {
+        processed++;
+        final body = email.body ?? email.snippet ?? '';
 
-      for (var i = 0; i < simpleEmails.length; i += batchSize) {
-        final batch = simpleEmails.skip(i).take(batchSize).toList();
-        final batchIndex = i ~/ batchSize;
+        // Check if this SMS was already processed
+        if (await _databaseService.transactionExists(body)) {
+          continue;
+        }
 
-        // Parse batch in isolate
-        final results = await compute(
-          parseEmailBatch,
-          EmailParseRequest(emails: batch, batchIndex: batchIndex),
+        // Parse the SMS
+        final transaction = _smsParserService.parseFromEmail(
+          body,
+          emailDate: email.date,
         );
 
-        allResults.addAll(results);
-        processedCount += batch.length;
+        if (transaction != null) {
+          await _databaseService.insertTransaction(transaction);
+          newTransactions++;
+          debugPrint('[SubscriptionBloc] Saved: ${transaction.merchant} - ${transaction.amount} ${transaction.currency}');
+        }
 
         emit(state.copyWith(
           syncProgress: SyncProgress(
-            totalFound: emails.length,
-            processed: processedCount,
-            status: 'Анализ: $processedCount/${emails.length}',
+            totalFound: smsEmails.length,
+            processed: processed,
+            currentEmail: transaction?.merchant ?? 'Обработка...',
+            status: 'Обработано: $processed/${smsEmails.length}',
           ),
         ));
       }
 
-      debugPrint('[SubscriptionBloc] Parsed ${allResults.length} subscriptions from ${emails.length} emails');
+      debugPrint('[SubscriptionBloc] Saved $newTransactions new transactions');
 
-      // Save unique subscriptions to database
-      final addedServices = <String>{};
-      int newCount = 0;
+      // Detect subscriptions from all transactions
+      emit(state.copyWith(
+        syncProgress: const SyncProgress(status: 'Анализ подписок...'),
+      ));
 
-      for (final result in allResults) {
-        // Skip subscriptions with no valid amount
-        if (result.amount == null || result.amount! <= 0) {
-          debugPrint('[SubscriptionBloc] Skipped ${result.serviceName} - no valid amount');
-          continue;
-        }
+      final allTransactions = await _databaseService.getAllTransactions();
+      final detectedSubscriptions = _smsParserService.detectSubscriptions(
+        allTransactions,
+        minOccurrences: 2,
+      );
 
-        // Skip if we already added this service (take first/most recent)
-        if (addedServices.contains(result.serviceName)) {
-          debugPrint('[SubscriptionBloc] Skipped ${result.serviceName} - already added');
-          continue;
-        }
+      debugPrint('[SubscriptionBloc] Detected ${detectedSubscriptions.length} subscriptions');
 
-        final subscription = result.toSubscription();
+      // Update subscriptions in database
+      await _databaseService.deleteAllSubscriptions();
+
+      for (final detected in detectedSubscriptions) {
+        final subscription = _convertDetectedToSubscription(detected);
         await _databaseService.insertSubscription(subscription);
-        addedServices.add(result.serviceName);
-        newCount++;
-        debugPrint('[SubscriptionBloc] Added: ${result.serviceName}');
+        debugPrint('[SubscriptionBloc] Added subscription: ${detected.merchant}');
       }
 
       final subscriptions = await _databaseService.getAllSubscriptions();
       final totalSpending = await _databaseService.getTotalMonthlySpending();
 
-      debugPrint('[SubscriptionBloc] Sync complete. Added: $newCount subscriptions');
+      debugPrint('[SubscriptionBloc] Sync complete. Subscriptions: ${subscriptions.length}');
       emit(state.copyWith(
         isSyncing: false,
         syncProgress: null,
@@ -233,136 +236,6 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       add(const SubscriptionLoadRequested());
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
-    }
-  }
-
-  Future<void> _onTransactionSyncRequested(
-    TransactionSyncRequested event,
-    Emitter<SubscriptionState> emit,
-  ) async {
-    debugPrint('[SubscriptionBloc] Starting SMS transaction sync...');
-    emit(state.copyWith(
-      isSyncing: true,
-      syncProgress: const SyncProgress(status: 'Авторизация...'),
-    ));
-
-    try {
-      final authClient = await _authService.getAuthClient();
-      if (authClient == null) {
-        debugPrint('[SubscriptionBloc] Auth failed');
-        emit(state.copyWith(
-          isSyncing: false,
-          syncProgress: null,
-          error: 'Не удалось авторизоваться',
-        ));
-        return;
-      }
-
-      debugPrint('[SubscriptionBloc] Auth successful, initializing Gmail...');
-      await _gmailService.init(authClient);
-
-      debugPrint('[SubscriptionBloc] Searching for SMS emails...');
-      emit(state.copyWith(
-        syncProgress: const SyncProgress(status: 'Поиск SMS писем...'),
-      ));
-
-      final smsEmails = await _gmailService.searchSmsEmails(
-        subjectPrefix: 'RAIFEISEN',
-        maxResults: 500,
-        onProgress: (progress) {
-          add(SubscriptionSyncProgressUpdated(progress));
-        },
-      );
-
-      debugPrint('[SubscriptionBloc] Found ${smsEmails.length} SMS emails');
-
-      emit(state.copyWith(
-        syncProgress: SyncProgress(
-          totalFound: smsEmails.length,
-          processed: 0,
-          status: 'Обработка ${smsEmails.length} SMS...',
-        ),
-      ));
-
-      // Parse SMS emails and save transactions
-      int newTransactions = 0;
-      int processed = 0;
-
-      for (final email in smsEmails) {
-        processed++;
-        final body = email.body ?? email.snippet ?? '';
-
-        // Check if this SMS was already processed
-        if (await _databaseService.transactionExists(body)) {
-          debugPrint('[SubscriptionBloc] Transaction already exists, skipping');
-          continue;
-        }
-
-        // Parse the SMS
-        final transaction = _smsParserService.parseFromEmail(
-          body,
-          emailDate: email.date,
-        );
-
-        if (transaction != null) {
-          await _databaseService.insertTransaction(transaction);
-          newTransactions++;
-          debugPrint('[SubscriptionBloc] Saved transaction: ${transaction.merchant} - ${transaction.amount} ${transaction.currency}');
-        }
-
-        emit(state.copyWith(
-          syncProgress: SyncProgress(
-            totalFound: smsEmails.length,
-            processed: processed,
-            currentEmail: transaction?.merchant ?? 'Обработка...',
-            status: 'Обработано: $processed/${smsEmails.length}',
-          ),
-        ));
-      }
-
-      debugPrint('[SubscriptionBloc] Saved $newTransactions new transactions');
-
-      // Detect subscriptions from transactions
-      emit(state.copyWith(
-        syncProgress: const SyncProgress(status: 'Анализ подписок...'),
-      ));
-
-      final allTransactions = await _databaseService.getAllTransactions();
-      final detectedSubscriptions = _smsParserService.detectSubscriptions(
-        allTransactions,
-        minOccurrences: 2,
-      );
-
-      debugPrint('[SubscriptionBloc] Detected ${detectedSubscriptions.length} subscriptions');
-
-      // Convert detected subscriptions to app subscriptions
-      // Clear existing subscriptions first
-      await _databaseService.deleteAllSubscriptions();
-
-      for (final detected in detectedSubscriptions) {
-        final subscription = _convertDetectedToSubscription(detected);
-        await _databaseService.insertSubscription(subscription);
-        debugPrint('[SubscriptionBloc] Added subscription: ${detected.merchant}');
-      }
-
-      final subscriptions = await _databaseService.getAllSubscriptions();
-      final totalSpending = await _databaseService.getTotalMonthlySpending();
-
-      debugPrint('[SubscriptionBloc] SMS sync complete. Subscriptions: ${subscriptions.length}');
-      emit(state.copyWith(
-        isSyncing: false,
-        syncProgress: null,
-        subscriptions: subscriptions,
-        totalMonthlySpending: totalSpending,
-        status: SubscriptionLoadStatus.success,
-      ));
-    } catch (e) {
-      debugPrint('[SubscriptionBloc] SMS sync error: $e');
-      emit(state.copyWith(
-        isSyncing: false,
-        syncProgress: null,
-        error: e.toString(),
-      ));
     }
   }
 

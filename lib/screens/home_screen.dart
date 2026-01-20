@@ -53,23 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 context.read<AuthBloc>().add(const AuthSignOutRequested());
               } else if (value == 'clear_all') {
                 _showClearAllDialog(context);
-              } else if (value == 'sync_sms') {
-                context
-                    .read<SubscriptionBloc>()
-                    .add(const TransactionSyncRequested());
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'sync_sms',
-                child: Row(
-                  children: [
-                    Icon(Icons.sms),
-                    SizedBox(width: 8),
-                    Text('Синхр. SMS'),
-                  ],
-                ),
-              ),
               const PopupMenuItem(
                 value: 'clear_all',
                 child: Row(

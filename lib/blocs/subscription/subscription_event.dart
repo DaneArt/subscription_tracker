@@ -56,7 +56,3 @@ class SubscriptionSyncProgressUpdated extends SubscriptionEvent {
   @override
   List<Object?> get props => [progress];
 }
-
-class TransactionSyncRequested extends SubscriptionEvent {
-  const TransactionSyncRequested();
-}
