@@ -55,7 +55,9 @@ class EmailParserService {
   static const _promoKeywords = [
     'recommend', 'watch now', 'new on', 'coming soon', 'don\'t miss',
     'рекомендации', 'смотрите', 'новинки', 'скоро выйдет', 'не пропустите',
-    'посмотрите', 'выходит', 'напоминание', 'reminder',
+    'посмотрите', 'выходит', 'напоминание', 'reminder', 'снова на netflix',
+    'новое на netflix', 'лучшие рекомендации', 'готовы увидеть', 'вечером netflix',
+    'top picks', 'what to watch', 'trending now', 'because you watched',
   ];
 
   // Keywords that indicate subscription cancellation
@@ -73,18 +75,18 @@ class EmailParserService {
     final snippet = (email.snippet ?? '').toLowerCase();
     final combined = '$subject $snippet';
 
+    // First check if it's clearly a promo email (check subject and snippet)
+    for (final keyword in _promoKeywords) {
+      if (combined.contains(keyword.toLowerCase())) {
+        debugPrint('[EmailParser] Promo email detected: "$keyword"');
+        return false;
+      }
+    }
+
     // Check for billing keywords
     for (final keyword in _billingKeywords) {
       if (combined.contains(keyword.toLowerCase())) {
         return true;
-      }
-    }
-
-    // If no billing keywords, check if it's clearly promo
-    for (final keyword in _promoKeywords) {
-      if (subject.contains(keyword.toLowerCase())) {
-        debugPrint('[EmailParser] Promo email detected: "$keyword" in subject');
-        return false;
       }
     }
 

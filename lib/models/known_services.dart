@@ -41,15 +41,15 @@ const knownServices = [
   // Streaming
   KnownService(
     name: 'Netflix',
-    emailPatterns: ['netflix.com', 'netflix'],
-    subjectPatterns: ['netflix', 'подписка netflix'],
+    emailPatterns: ['@netflix.com'],
+    subjectPatterns: ['netflix membership', 'netflix subscription', 'netflix payment', 'оплата netflix', 'ваша подписка netflix'],
     category: SubscriptionCategory.streaming,
     typicalPrices: {
       'RUB': PriceRange(399, 2500),
       'USD': PriceRange(6.99, 25),
       'EUR': PriceRange(5.99, 20),
     },
-    amountContextPatterns: ['membership', 'подписка', 'план', 'plan', 'ежемесячн'],
+    amountContextPatterns: ['membership', 'подписка', 'план', 'plan', 'ежемесячн', 'payment', 'charged'],
   ),
   KnownService(
     name: 'Spotify',
@@ -65,15 +65,15 @@ const knownServices = [
   ),
   KnownService(
     name: 'YouTube Premium',
-    emailPatterns: ['youtube.com', 'google.com'],
-    subjectPatterns: ['youtube premium', 'youtube music'],
+    emailPatterns: ['youtube.com', 'payments-noreply@google.com', 'googleplay-noreply@google.com'],
+    subjectPatterns: ['youtube premium', 'youtube music', 'youtube membership', 'подписка youtube', 'your google play order'],
     category: SubscriptionCategory.streaming,
     typicalPrices: {
       'RUB': PriceRange(199, 600),
       'USD': PriceRange(9.99, 25),
       'EUR': PriceRange(9.99, 22),
     },
-    amountContextPatterns: ['premium', 'membership', 'подписка'],
+    amountContextPatterns: ['youtube', 'premium', 'membership', 'подписка'],
   ),
   KnownService(
     name: 'Apple Music',

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/subscription.dart';
@@ -5,6 +6,10 @@ import '../models/subscription.dart';
 class DatabaseService {
   static Database? _database;
   static const String _tableName = 'subscriptions';
+
+  // In-memory storage for web
+  static final List<Subscription> _webSubscriptions = [];
+  static int _webIdCounter = 1;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -57,17 +62,20 @@ class DatabaseService {
 
   Future<void> _upgradeDb(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add emailSubject and emailExcerpt columns
       await db.execute('ALTER TABLE $_tableName ADD COLUMN emailSubject TEXT');
       await db.execute('ALTER TABLE $_tableName ADD COLUMN emailExcerpt TEXT');
     }
     if (oldVersion < 3) {
-      // Add lastPaymentDate column
       await db.execute('ALTER TABLE $_tableName ADD COLUMN lastPaymentDate TEXT');
     }
   }
 
   Future<int> insertSubscription(Subscription subscription) async {
+    if (kIsWeb) {
+      final id = _webIdCounter++;
+      _webSubscriptions.add(subscription.copyWith(id: id));
+      return id;
+    }
     final db = await database;
     final map = subscription.toMap();
     map.remove('id');
@@ -75,6 +83,16 @@ class DatabaseService {
   }
 
   Future<List<Subscription>> getAllSubscriptions() async {
+    if (kIsWeb) {
+      final sorted = List<Subscription>.from(_webSubscriptions);
+      sorted.sort((a, b) {
+        final dateCompare = (a.nextBillingDate ?? DateTime(2100))
+            .compareTo(b.nextBillingDate ?? DateTime(2100));
+        if (dateCompare != 0) return dateCompare;
+        return a.serviceName.compareTo(b.serviceName);
+      });
+      return sorted;
+    }
     final db = await database;
     final maps = await db.query(
       _tableName,
@@ -84,6 +102,11 @@ class DatabaseService {
   }
 
   Future<List<Subscription>> getActiveSubscriptions() async {
+    if (kIsWeb) {
+      return _webSubscriptions
+          .where((s) => s.status == SubscriptionStatus.active)
+          .toList();
+    }
     final db = await database;
     final maps = await db.query(
       _tableName,
@@ -95,6 +118,13 @@ class DatabaseService {
   }
 
   Future<Subscription?> getSubscriptionById(int id) async {
+    if (kIsWeb) {
+      try {
+        return _webSubscriptions.firstWhere((s) => s.id == id);
+      } catch (_) {
+        return null;
+      }
+    }
     final db = await database;
     final maps = await db.query(
       _tableName,
@@ -106,6 +136,13 @@ class DatabaseService {
   }
 
   Future<Subscription?> getSubscriptionByServiceName(String serviceName) async {
+    if (kIsWeb) {
+      try {
+        return _webSubscriptions.firstWhere((s) => s.serviceName == serviceName);
+      } catch (_) {
+        return null;
+      }
+    }
     final db = await database;
     final maps = await db.query(
       _tableName,
@@ -117,6 +154,14 @@ class DatabaseService {
   }
 
   Future<int> updateSubscription(Subscription subscription) async {
+    if (kIsWeb) {
+      final index = _webSubscriptions.indexWhere((s) => s.id == subscription.id);
+      if (index != -1) {
+        _webSubscriptions[index] = subscription;
+        return 1;
+      }
+      return 0;
+    }
     final db = await database;
     return await db.update(
       _tableName,
@@ -127,6 +172,11 @@ class DatabaseService {
   }
 
   Future<int> deleteSubscription(int id) async {
+    if (kIsWeb) {
+      final lengthBefore = _webSubscriptions.length;
+      _webSubscriptions.removeWhere((s) => s.id == id);
+      return lengthBefore - _webSubscriptions.length;
+    }
     final db = await database;
     return await db.delete(
       _tableName,
@@ -136,6 +186,11 @@ class DatabaseService {
   }
 
   Future<int> deleteAllSubscriptions() async {
+    if (kIsWeb) {
+      final count = _webSubscriptions.length;
+      _webSubscriptions.clear();
+      return count;
+    }
     final db = await database;
     return await db.delete(_tableName);
   }
