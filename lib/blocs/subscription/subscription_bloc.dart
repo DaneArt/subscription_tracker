@@ -267,7 +267,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       ));
 
       final smsEmails = await _gmailService.searchSmsEmails(
-        subjectPrefix: '[RaiffeisenSMS]',
+        subjectPrefix: 'RAIFEISEN',
         maxResults: 500,
         onProgress: (progress) {
           add(SubscriptionSyncProgressUpdated(progress));

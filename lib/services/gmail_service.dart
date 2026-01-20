@@ -270,7 +270,7 @@ class GmailService {
   /// Search for SMS emails forwarded from iOS Shortcuts
   /// Expected subject format: [RaiffeisenSMS] or configurable prefix
   Future<List<EmailData>> searchSmsEmails({
-    String subjectPrefix = '[RaiffeisenSMS]',
+    String subjectPrefix = 'RAIFEISEN',
     int maxResults = 100,
     DateTime? after,
     SyncProgressCallback? onProgress,
