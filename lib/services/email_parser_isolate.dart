@@ -1,7 +1,4 @@
-import 'dart:isolate';
-import 'package:flutter/foundation.dart';
 import '../models/models.dart';
-import '../models/known_services.dart';
 import 'package:html/parser.dart' as html_parser;
 
 /// Data class for passing to isolate

@@ -201,17 +201,6 @@ class EmailParserService {
     debugPrint('[EmailParser] Processing as Apple Receipt...');
     final textContent = _extractTextContent(email);
 
-    // Try to extract the actual service name from the receipt
-    // Apple receipts have format: "ServiceName\nPlan Name (Monthly)\nRenews..."
-    final servicePatterns = [
-      // ChatGPT
-      RegExp(r'ChatGPT\s*(?:ChatGPT\s+)?Plus', caseSensitive: false),
-      // iCloud
-      RegExp(r'iCloud\s*(?:iCloud\+?\s+)?(?:with\s+)?\d+\s*GB', caseSensitive: false),
-      // Generic pattern: AppName followed by plan
-      RegExp(r'([A-Za-zА-Яа-я0-9\s\-:]+?)(?:\s*\n|\s{2,})([A-Za-zА-Яа-я0-9\s\-]+?\s*\(?(?:Monthly|Yearly|Annual|месяц|год)\)?)', caseSensitive: false),
-    ];
-
     String serviceName = 'Apple Purchase';
     SubscriptionCategory category = SubscriptionCategory.software;
 
