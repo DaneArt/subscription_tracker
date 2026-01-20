@@ -6,6 +6,9 @@ import 'package:googleapis_auth/googleapis_auth.dart';
 
 class AuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: kIsWeb
+        ? '348246886589-6pdiotfhh2gbg9ti8orj6bu76cp7udai.apps.googleusercontent.com'
+        : null,
     scopes: [
       'email',
       gmail.GmailApi.gmailReadonlyScope,
