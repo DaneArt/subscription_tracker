@@ -30,10 +30,13 @@ class AuthService {
 
   Future<GoogleSignInAccount?> signIn() async {
     try {
+      debugPrint('[AuthService] Starting signIn...');
       _currentUser = await _googleSignIn.signIn();
+      debugPrint('[AuthService] signIn result: $_currentUser');
       return _currentUser;
-    } catch (e) {
-      debugPrint('Error signing in: $e');
+    } catch (e, stackTrace) {
+      debugPrint('[AuthService] Error signing in: $e');
+      debugPrint('[AuthService] Stack trace: $stackTrace');
       return null;
     }
   }
