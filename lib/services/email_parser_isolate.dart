@@ -137,6 +137,11 @@ const _cancellationKeywords = [
 ];
 
 ParsedEmailResult? _parseEmailInIsolate(EmailDataSimple email) {
+  // Check for forwarded bank SMS first (these don't have standard billing keywords)
+  if (_isBankSmsForward(email)) {
+    return _parseBankSms(email);
+  }
+
   if (!_isBillingEmail(email)) {
     return null;
   }
@@ -207,6 +212,108 @@ bool _isCancelledSubscription(String text, String subject) {
     }
   }
   return false;
+}
+
+/// Detects forwarded bank SMS transactions (e.g., Raiffeisen Serbia)
+bool _isBankSmsForward(EmailDataSimple email) {
+  final text = '${email.subject ?? ''} ${email.snippet ?? ''} ${email.body ?? ''}'.toLowerCase();
+  return text.contains('koriscenje kartice') ||
+         (text.contains('iznos:') && text.contains('mesto:'));
+}
+
+ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
+  final textContent = _extractTextContent(email);
+
+  // Extract amount from "Iznos: 1.099,00 RSD" or "Iznos: 819,00 RSD"
+  final amountMatch = RegExp(
+    r'iznos:\s*([\d.]+,\d{2})\s*(\w+)',
+    caseSensitive: false,
+  ).firstMatch(textContent);
+
+  double? amount;
+  String currency = 'RSD';
+
+  if (amountMatch != null) {
+    final amountStr = amountMatch.group(1)!
+        .replaceAll('.', '')
+        .replaceAll(',', '.');
+    amount = double.tryParse(amountStr);
+    currency = amountMatch.group(2)!.toUpperCase();
+  }
+
+  // Extract date from "Datum: 17.02.2026 15:45:39"
+  DateTime? billingDate;
+  final dateMatch = RegExp(
+    r'datum:\s*(\d{1,2})\.(\d{1,2})\.(\d{4})',
+    caseSensitive: false,
+  ).firstMatch(textContent);
+  if (dateMatch != null) {
+    final day = int.tryParse(dateMatch.group(1)!);
+    final month = int.tryParse(dateMatch.group(2)!);
+    final year = int.tryParse(dateMatch.group(3)!);
+    if (day != null && month != null && year != null) {
+      try {
+        billingDate = DateTime(year, month, day);
+      } catch (_) {}
+    }
+  }
+
+  // Extract merchant from "Mesto: GOOGLE *YouTubePremium g.co/HelpPay#US"
+  final merchantMatch = RegExp(
+    r'mesto:\s*(.+)',
+    caseSensitive: false,
+  ).firstMatch(textContent);
+  final merchantRaw = merchantMatch?.group(1)?.trim();
+
+  if (merchantRaw == null) return null;
+
+  // Map merchant to known service
+  final merchantNormalized = merchantRaw.toLowerCase().replaceAll(RegExp(r'[\s*._]+'), '');
+  KnownService? matchedService;
+
+  for (final service in knownServices) {
+    final nameNormalized = service.name.toLowerCase().replaceAll(' ', '');
+    if (merchantNormalized.contains(nameNormalized)) {
+      matchedService = service;
+      break;
+    }
+    for (final pattern in service.subjectPatterns) {
+      final patternNormalized = pattern.toLowerCase().replaceAll(' ', '');
+      if (merchantNormalized.contains(patternNormalized)) {
+        matchedService = service;
+        break;
+      }
+    }
+    if (matchedService != null) break;
+  }
+
+  final serviceName = matchedService?.name ?? _cleanMerchantName(merchantRaw);
+  final category = matchedService?.category.name ?? 'other';
+  final excerpt = 'Iznos: ${amountMatch?.group(1) ?? '?'} $currency, Mesto: $merchantRaw';
+
+  return ParsedEmailResult(
+    serviceName: serviceName,
+    amount: amount,
+    currency: currency,
+    billingDateIso: billingDate?.toIso8601String(),
+    lastPaymentDateIso: billingDate?.toIso8601String(),
+    billingPeriod: 'monthly',
+    category: category,
+    isCancelled: false,
+    emailId: email.id,
+    emailSubject: email.subject,
+    emailExcerpt: excerpt,
+  );
+}
+
+String _cleanMerchantName(String raw) {
+  var cleaned = raw.replaceAll(RegExp(r'\s+\S+\.\S+/\S+'), '').trim();
+  cleaned = cleaned.replaceAll(RegExp(r'\.(com|net|org|io|tv|ru)$', caseSensitive: false), '').trim();
+  cleaned = cleaned.replaceAll(RegExp(r'^google\s*\*\s*', caseSensitive: false), '').trim();
+  if (cleaned.isNotEmpty) {
+    cleaned = cleaned[0].toUpperCase() + cleaned.substring(1).toLowerCase();
+  }
+  return cleaned.isEmpty ? raw : cleaned;
 }
 
 bool _isAppleReceipt(EmailDataSimple email) {
