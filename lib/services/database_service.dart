@@ -2,18 +2,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/subscription.dart';
-import '../models/transaction.dart';
 
 class DatabaseService {
   static Database? _database;
   static const String _tableName = 'subscriptions';
-  static const String _transactionsTable = 'transactions';
 
   // In-memory storage for web
   static final List<Subscription> _webSubscriptions = [];
-  static final List<BankTransaction> _webTransactions = [];
   static int _webIdCounter = 1;
-  static int _webTransactionIdCounter = 1;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -62,33 +58,6 @@ class DatabaseService {
     await db.execute('''
       CREATE INDEX idx_subscriptions_serviceName ON $_tableName(serviceName)
     ''');
-
-    await _createTransactionsTable(db);
-  }
-
-  Future<void> _createTransactionsTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE $_transactionsTable (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cardNumber TEXT NOT NULL,
-        date TEXT NOT NULL,
-        amount REAL NOT NULL,
-        currency TEXT NOT NULL,
-        balanceAfter REAL,
-        balanceCurrency TEXT,
-        merchant TEXT NOT NULL,
-        rawSms TEXT,
-        createdAt TEXT NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE INDEX idx_transactions_date ON $_transactionsTable(date)
-    ''');
-
-    await db.execute('''
-      CREATE INDEX idx_transactions_merchant ON $_transactionsTable(merchant)
-    ''');
   }
 
   Future<void> _upgradeDb(Database db, int oldVersion, int newVersion) async {
@@ -98,9 +67,6 @@ class DatabaseService {
     }
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE $_tableName ADD COLUMN lastPaymentDate TEXT');
-    }
-    if (oldVersion < 4) {
-      await _createTransactionsTable(db);
     }
   }
 
@@ -265,110 +231,6 @@ class DatabaseService {
       total += _convertToRub(monthlyAmount, sub.currency);
     }
     return total;
-  }
-
-  // Transaction methods
-
-  Future<int> insertTransaction(BankTransaction transaction) async {
-    if (kIsWeb) {
-      final id = _webTransactionIdCounter++;
-      _webTransactions.add(transaction.copyWith(id: id));
-      return id;
-    }
-    final db = await database;
-    final map = transaction.toMap();
-    map.remove('id');
-    return await db.insert(_transactionsTable, map);
-  }
-
-  Future<List<BankTransaction>> getAllTransactions() async {
-    if (kIsWeb) {
-      final sorted = List<BankTransaction>.from(_webTransactions);
-      sorted.sort((a, b) => b.date.compareTo(a.date));
-      return sorted;
-    }
-    final db = await database;
-    final maps = await db.query(
-      _transactionsTable,
-      orderBy: 'date DESC',
-    );
-    return maps.map((map) => BankTransaction.fromMap(map)).toList();
-  }
-
-  Future<List<BankTransaction>> getTransactionsByDateRange(
-    DateTime start,
-    DateTime end,
-  ) async {
-    if (kIsWeb) {
-      final result = _webTransactions
-          .where((t) => t.date.isAfter(start) && t.date.isBefore(end))
-          .toList();
-      result.sort((a, b) => b.date.compareTo(a.date));
-      return result;
-    }
-    final db = await database;
-    final maps = await db.query(
-      _transactionsTable,
-      where: 'date >= ? AND date <= ?',
-      whereArgs: [start.toIso8601String(), end.toIso8601String()],
-      orderBy: 'date DESC',
-    );
-    return maps.map((map) => BankTransaction.fromMap(map)).toList();
-  }
-
-  Future<BankTransaction?> getTransactionById(int id) async {
-    if (kIsWeb) {
-      try {
-        return _webTransactions.firstWhere((t) => t.id == id);
-      } catch (_) {
-        return null;
-      }
-    }
-    final db = await database;
-    final maps = await db.query(
-      _transactionsTable,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isEmpty) return null;
-    return BankTransaction.fromMap(maps.first);
-  }
-
-  Future<bool> transactionExists(String rawSms) async {
-    if (kIsWeb) {
-      return _webTransactions.any((t) => t.rawSms == rawSms);
-    }
-    final db = await database;
-    final maps = await db.query(
-      _transactionsTable,
-      where: 'rawSms = ?',
-      whereArgs: [rawSms],
-    );
-    return maps.isNotEmpty;
-  }
-
-  Future<int> deleteTransaction(int id) async {
-    if (kIsWeb) {
-      final lengthBefore = _webTransactions.length;
-      _webTransactions.removeWhere((t) => t.id == id);
-      return lengthBefore - _webTransactions.length;
-    }
-    final db = await database;
-    return await db.delete(
-      _transactionsTable,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> deleteAllTransactions() async {
-    if (kIsWeb) {
-      final count = _webTransactions.length;
-      _webTransactions.clear();
-      return count;
-    }
-    final db = await database;
-    return await db.delete(_transactionsTable);
   }
 
   Future<void> close() async {
