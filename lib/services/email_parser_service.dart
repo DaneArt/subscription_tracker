@@ -118,6 +118,136 @@ class EmailParserService {
     return false;
   }
 
+  /// Detects forwarded bank SMS transactions (e.g., Raiffeisen Serbia)
+  /// Format: Koriscenje kartice ... Iznos: 819,00 RSD ... Mesto: GOOGLE *YouTubePremium
+  bool _isBankSmsForward(EmailData email) {
+    final text = '${email.subject ?? ''} ${email.snippet ?? ''} ${email.body ?? ''}'.toLowerCase();
+    return text.contains('koriscenje kartice') ||
+           (text.contains('iznos:') && text.contains('mesto:'));
+  }
+
+  ParsedSubscription? _parseBankSms(EmailData email) {
+    debugPrint('[EmailParser] Processing as Bank SMS forward...');
+    final textContent = _extractTextContent(email);
+
+    // Extract amount from "Iznos: 1.099,00 RSD" or "Iznos: 819,00 RSD"
+    // Serbian number format: . = thousands separator, , = decimal separator
+    final amountMatch = RegExp(
+      r'iznos:\s*([\d.]+,\d{2})\s*(\w+)',
+      caseSensitive: false,
+    ).firstMatch(textContent);
+
+    double? amount;
+    String currency = 'RSD';
+
+    if (amountMatch != null) {
+      final amountStr = amountMatch.group(1)!
+          .replaceAll('.', '')   // Remove thousands separator
+          .replaceAll(',', '.'); // Replace decimal comma with dot
+      amount = double.tryParse(amountStr);
+      currency = amountMatch.group(2)!.toUpperCase();
+      debugPrint('[EmailParser] Bank SMS amount: $amount $currency');
+    }
+
+    // Extract date from "Datum: 17.02.2026 15:45:39"
+    DateTime? billingDate;
+    final dateMatch = RegExp(
+      r'datum:\s*(\d{1,2})\.(\d{1,2})\.(\d{4})',
+      caseSensitive: false,
+    ).firstMatch(textContent);
+    if (dateMatch != null) {
+      final day = int.tryParse(dateMatch.group(1)!);
+      final month = int.tryParse(dateMatch.group(2)!);
+      final year = int.tryParse(dateMatch.group(3)!);
+      if (day != null && month != null && year != null) {
+        try {
+          billingDate = DateTime(year, month, day);
+        } catch (_) {}
+      }
+      debugPrint('[EmailParser] Bank SMS date: $billingDate');
+    }
+
+    // Extract merchant from "Mesto: GOOGLE *YouTubePremium g.co/HelpPay#US"
+    final merchantMatch = RegExp(
+      r'mesto:\s*(.+)',
+      caseSensitive: false,
+    ).firstMatch(textContent);
+    final merchantRaw = merchantMatch?.group(1)?.trim();
+
+    if (merchantRaw == null) {
+      debugPrint('[EmailParser] ❌ No merchant name found in bank SMS');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      return null;
+    }
+
+    debugPrint('[EmailParser] Bank SMS merchant: $merchantRaw');
+
+    // Map merchant to known service
+    // Merchant examples: "GOOGLE *YouTubePremium g.co/HelpPay#US", "NETFLIX.COM g.co/HelpPay#NL"
+    final merchantNormalized = merchantRaw.toLowerCase().replaceAll(RegExp(r'[\s*._]+'), '');
+    KnownService? matchedService;
+
+    for (final service in knownServices) {
+      final nameNormalized = service.name.toLowerCase().replaceAll(' ', '');
+      if (merchantNormalized.contains(nameNormalized)) {
+        matchedService = service;
+        break;
+      }
+      for (final pattern in service.subjectPatterns) {
+        final patternNormalized = pattern.toLowerCase().replaceAll(' ', '');
+        if (merchantNormalized.contains(patternNormalized)) {
+          matchedService = service;
+          break;
+        }
+      }
+      if (matchedService != null) break;
+    }
+
+    // Use merchant name as fallback if no known service matched
+    final serviceName = matchedService?.name ?? _cleanMerchantName(merchantRaw);
+    final category = matchedService?.category ?? SubscriptionCategory.other;
+
+    debugPrint('[EmailParser] Bank SMS service: $serviceName (matched: ${matchedService != null})');
+
+    // Build excerpt from the SMS text
+    final excerpt = 'Iznos: ${amountMatch?.group(1) ?? '?'} ${currency}, Mesto: $merchantRaw';
+
+    debugPrint('[EmailParser] RESULT (Bank SMS): $serviceName');
+    debugPrint('[EmailParser]   Amount: ${amount ?? "NOT FOUND"} $currency');
+    debugPrint('[EmailParser]   Billing date: $billingDate');
+    debugPrint('[EmailParser]   Excerpt: $excerpt');
+    debugPrint('═══════════════════════════════════════════════════════════');
+
+    return ParsedSubscription(
+      serviceName: serviceName,
+      amount: amount,
+      currency: currency,
+      billingDate: billingDate,
+      lastPaymentDate: billingDate,
+      billingPeriod: BillingPeriod.monthly,
+      category: category,
+      isCancelled: false,
+      emailId: email.id,
+      emailSubject: email.subject,
+      emailExcerpt: excerpt,
+    );
+  }
+
+  /// Cleans up raw merchant name for display (e.g., "NETFLIX.COM g.co/HelpPay#NL" → "Netflix")
+  String _cleanMerchantName(String raw) {
+    // Remove URLs (anything like x.xx/xxx)
+    var cleaned = raw.replaceAll(RegExp(r'\s+\S+\.\S+/\S+'), '').trim();
+    // Remove trailing domain suffixes
+    cleaned = cleaned.replaceAll(RegExp(r'\.(com|net|org|io|tv|ru)$', caseSensitive: false), '').trim();
+    // Remove GOOGLE * prefix for Google services
+    cleaned = cleaned.replaceAll(RegExp(r'^google\s*\*\s*', caseSensitive: false), '').trim();
+    // Title case
+    if (cleaned.isNotEmpty) {
+      cleaned = cleaned[0].toUpperCase() + cleaned.substring(1).toLowerCase();
+    }
+    return cleaned.isEmpty ? raw : cleaned;
+  }
+
   DateTime? _extractLastPaymentDate(DateTime? emailDate) {
     // Use the email date as the payment date
     // (payment receipts are sent on the payment day)
@@ -132,6 +262,12 @@ class EmailParserService {
     debugPrint('[EmailParser] Subject: ${email.subject}');
     debugPrint('[EmailParser] From: ${email.from}');
     debugPrint('[EmailParser] Snippet: ${email.snippet}');
+
+    // Check for forwarded bank SMS first (these don't have standard billing keywords)
+    if (_isBankSmsForward(email)) {
+      debugPrint('[EmailParser] ✓ Bank SMS forward detected');
+      return _parseBankSms(email);
+    }
 
     // First check if this is a billing email
     if (!_isBillingEmail(email)) {
