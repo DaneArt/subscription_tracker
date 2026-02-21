@@ -208,6 +208,44 @@ class DatabaseService {
     return amount * rate;
   }
 
+  /// Отменяет подписки, у которых последний платёж был больше месяца назад.
+  /// Годовые подписки не затрагиваются.
+  Future<int> cancelInactiveSubscriptions() async {
+    final now = DateTime.now();
+    final cutoff = DateTime(now.year, now.month - 1, now.day);
+    final cutoffIso = cutoff.toIso8601String();
+    final nowIso = now.toIso8601String();
+
+    if (kIsWeb) {
+      var count = 0;
+      for (var i = 0; i < _webSubscriptions.length; i++) {
+        final s = _webSubscriptions[i];
+        if (s.status == SubscriptionStatus.active &&
+            s.billingPeriod != BillingPeriod.yearly &&
+            s.lastPaymentDate != null &&
+            s.lastPaymentDate!.isBefore(cutoff)) {
+          _webSubscriptions[i] = s.copyWith(
+            status: SubscriptionStatus.cancelled,
+            updatedAt: now,
+          );
+          count++;
+        }
+      }
+      return count;
+    }
+
+    final db = await database;
+    return await db.rawUpdate(
+      '''UPDATE $_tableName
+         SET status = 'cancelled', updatedAt = ?
+         WHERE status = 'active'
+           AND billingPeriod != 'yearly'
+           AND lastPaymentDate IS NOT NULL
+           AND lastPaymentDate < ?''',
+      [nowIso, cutoffIso],
+    );
+  }
+
   Future<double> getTotalMonthlySpending() async {
     final subscriptions = await getActiveSubscriptions();
     double total = 0;
