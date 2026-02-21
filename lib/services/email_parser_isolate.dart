@@ -115,7 +115,16 @@ const _billingKeywords = [
 const _promoKeywords = [
   'recommend', 'watch now', 'new on', 'coming soon', 'don\'t miss',
   'рекомендации', 'смотрите', 'новинки', 'скоро выйдет', 'не пропустите',
-  'посмотрите', 'выходит', 'напоминание', 'reminder',
+  'посмотрите', 'выходит', 'снова на netflix',
+  'новое на netflix', 'лучшие рекомендации', 'готовы увидеть', 'вечером netflix',
+  'top picks', 'what to watch', 'trending now', 'because you watched',
+  // Subscription management/tracker alert emails (not actual receipts)
+  'subscription alert', 'upcoming subscription', 'subscriptions this week',
+  'upcoming subscriptions', 'cancel unwanted', 'your concierge',
+  // Discount/deal promotional emails
+  'deal ends', '% off', 'off annual', 'off premium',
+  'special offer', 'limited time',
+  'скидка', 'акция', 'специальное предложение',
 ];
 
 const _cancellationKeywords = [
@@ -168,15 +177,22 @@ bool _isBillingEmail(EmailDataSimple email) {
   final snippet = (email.snippet ?? '').toLowerCase();
   final combined = '$subject $snippet';
 
-  for (final keyword in _billingKeywords) {
+  // First check if it's clearly a promo email (check subject and snippet)
+  for (final keyword in _promoKeywords) {
     if (combined.contains(keyword.toLowerCase())) {
-      return true;
+      return false;
     }
   }
 
-  for (final keyword in _promoKeywords) {
-    if (subject.contains(keyword.toLowerCase())) {
-      return false;
+  // Check for discount patterns: "$X off", "X% off"
+  if (RegExp(r'\$\d+\s*off|\d+%\s*off', caseSensitive: false).hasMatch(combined)) {
+    return false;
+  }
+
+  // Check for billing keywords
+  for (final keyword in _billingKeywords) {
+    if (combined.contains(keyword.toLowerCase())) {
+      return true;
     }
   }
 

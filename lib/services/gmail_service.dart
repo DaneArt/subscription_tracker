@@ -138,7 +138,30 @@ class GmailService {
       'чек',
     ];
 
-    return keywords.map((k) => '("$k")').join(' OR ');
+    // Also search by sender for known subscription services
+    // This catches emails that don't contain standard billing keywords
+    final senderPatterns = [
+      'netflix.com',
+      'spotify.com',
+      'youtube.com',
+      'payments-noreply@google.com',
+      'googleplay-noreply@google.com',
+      'apple.com',
+      'plus.yandex',
+      'passport.yandex',
+      'nordvpn.com',
+      'jetbrains.com',
+      'adobe.com',
+      'anthropic.com',
+      'openai.com',
+      'dropbox.com',
+      'github.com',
+    ];
+
+    final keywordQuery = keywords.map((k) => '("$k")').join(' OR ');
+    final senderQuery = senderPatterns.map((s) => 'from:$s').join(' OR ');
+
+    return '$keywordQuery OR $senderQuery';
   }
 
   Future<EmailData?> _getEmailDetails(String messageId) async {
