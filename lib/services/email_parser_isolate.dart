@@ -125,6 +125,9 @@ const _promoKeywords = [
   'deal ends', '% off', 'off annual', 'off premium',
   'special offer', 'limited time',
   'скидка', 'акция', 'специальное предложение',
+  // CI/development notification emails (not billing)
+  'run failed', 'run succeeded', 'workflow run',
+  'build passed', 'build failed',
 ];
 
 const _cancellationKeywords = [
@@ -132,8 +135,8 @@ const _cancellationKeywords = [
   'subscription cancelled', 'subscription canceled',
   'отменена', 'отменен', 'отмена подписки', 'подписка отменена',
   'вы отменили', 'успешно отменена', 'прекращена',
-  'is expiring', 'will expire', 'expires on', 'will end',
-  'истекает', 'закончится', 'завершится',
+  'has expired', 'expired', 'is expiring', 'will expire', 'expires on', 'will end',
+  'истек', 'истекла', 'истекает', 'закончилась', 'закончится', 'завершится',
 ];
 
 ParsedEmailResult? _parseEmailInIsolate(EmailDataSimple email) {
@@ -259,8 +262,9 @@ ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
   }
 
   // Extract merchant from "Mesto: GOOGLE *YouTubePremium g.co/HelpPay#US"
+  // Use lazy match with boundaries to avoid capturing text from subsequent SMS messages
   final merchantMatch = RegExp(
-    r'mesto:\s*(.+)',
+    r'mesto:\s*(.+?)(?=\s+(?:koriscenje|datum:|iznos:|mesto:)|\s*$)',
     caseSensitive: false,
   ).firstMatch(textContent);
   final merchantRaw = merchantMatch?.group(1)?.trim();
@@ -289,6 +293,7 @@ ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
 
   final serviceName = matchedService?.name ?? _cleanMerchantName(merchantRaw);
   final category = matchedService?.category.name ?? 'other';
+  final isCancelled = merchantRaw.toLowerCase().contains('cancel');
   final excerpt = 'Iznos: ${amountMatch?.group(1) ?? '?'} $currency, Mesto: $merchantRaw';
 
   return ParsedEmailResult(
@@ -299,7 +304,7 @@ ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
     lastPaymentDateIso: billingDate?.toIso8601String(),
     billingPeriod: 'monthly',
     category: category,
-    isCancelled: false,
+    isCancelled: isCancelled,
     emailId: email.id,
     emailSubject: email.subject,
     emailExcerpt: excerpt,
