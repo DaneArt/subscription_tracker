@@ -65,6 +65,9 @@ class EmailParserService {
     'deal ends', '% off', 'off annual', 'off premium',
     'special offer', 'limited time',
     'скидка', 'акция', 'специальное предложение',
+    // CI/development notification emails (not billing)
+    'run failed', 'run succeeded', 'workflow run',
+    'build passed', 'build failed',
   ];
 
   // Keywords that indicate subscription cancellation
@@ -73,8 +76,8 @@ class EmailParserService {
     'subscription cancelled', 'subscription canceled',
     'отменена', 'отменен', 'отмена подписки', 'подписка отменена',
     'вы отменили', 'успешно отменена', 'прекращена',
-    'is expiring', 'will expire', 'expires on', 'will end',
-    'истекает', 'закончится', 'завершится',
+    'has expired', 'expired', 'is expiring', 'will expire', 'expires on', 'will end',
+    'истек', 'истекла', 'истекает', 'закончилась', 'закончится', 'завершится',
   ];
 
   bool _isBillingEmail(EmailData email) {
@@ -168,8 +171,9 @@ class EmailParserService {
     }
 
     // Extract merchant from "Mesto: GOOGLE *YouTubePremium g.co/HelpPay#US"
+    // Use lazy match with boundaries to avoid capturing text from subsequent SMS messages
     final merchantMatch = RegExp(
-      r'mesto:\s*(.+)',
+      r'mesto:\s*(.+?)(?=\s+(?:koriscenje|datum:|iznos:|mesto:)|\s*$)',
       caseSensitive: false,
     ).firstMatch(textContent);
     final merchantRaw = merchantMatch?.group(1)?.trim();
@@ -209,12 +213,16 @@ class EmailParserService {
 
     debugPrint('[EmailParser] Bank SMS service: $serviceName (matched: ${matchedService != null})');
 
+    // Detect cancellation from merchant name (e.g., "CANCEL SUBSCRIPTIONS NEW YORK US")
+    final isCancelled = merchantRaw.toLowerCase().contains('cancel');
+
     // Build excerpt from the SMS text
     final excerpt = 'Iznos: ${amountMatch?.group(1) ?? '?'} ${currency}, Mesto: $merchantRaw';
 
     debugPrint('[EmailParser] RESULT (Bank SMS): $serviceName');
     debugPrint('[EmailParser]   Amount: ${amount ?? "NOT FOUND"} $currency');
     debugPrint('[EmailParser]   Billing date: $billingDate');
+    debugPrint('[EmailParser]   Cancelled: $isCancelled');
     debugPrint('[EmailParser]   Excerpt: $excerpt');
     debugPrint('═══════════════════════════════════════════════════════════');
 
@@ -226,7 +234,7 @@ class EmailParserService {
       lastPaymentDate: billingDate,
       billingPeriod: BillingPeriod.monthly,
       category: category,
-      isCancelled: false,
+      isCancelled: isCancelled,
       emailId: email.id,
       emailSubject: email.subject,
       emailExcerpt: excerpt,

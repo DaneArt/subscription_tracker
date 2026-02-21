@@ -55,7 +55,7 @@ const knownServices = [
   KnownService(
     name: 'Spotify',
     emailPatterns: ['spotify.com', 'spotify'],
-    subjectPatterns: ['spotify', 'premium'],
+    subjectPatterns: ['spotify', 'spotify premium'],
     category: SubscriptionCategory.streaming,
     typicalPrices: {
       'RUB': PriceRange(99, 500),
@@ -265,7 +265,7 @@ const knownServices = [
   KnownService(
     name: 'MyFitnessPal',
     emailPatterns: ['myfitnesspal.com', 'myfitnesspal'],
-    subjectPatterns: ['myfitnesspal', 'premium'],
+    subjectPatterns: ['myfitnesspal', 'myfitnesspal premium'],
     category: SubscriptionCategory.fitness,
     typicalPrices: {
       'USD': PriceRange(9, 25),
@@ -359,8 +359,8 @@ const knownServices = [
   ),
   KnownService(
     name: 'GitHub',
-    emailPatterns: ['github.com', 'noreply@github.com'],
-    subjectPatterns: ['github', 'github pro', 'github copilot'],
+    emailPatterns: ['billing@github.com'],
+    subjectPatterns: ['github pro', 'github copilot', 'github subscription', 'github payment'],
     category: SubscriptionCategory.software,
     typicalPrices: {
       'USD': PriceRange(4, 25),
