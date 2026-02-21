@@ -35,6 +35,10 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     debugPrint('[SubscriptionBloc] Loading subscriptions...');
     emit(state.copyWith(status: SubscriptionLoadStatus.loading));
     try {
+      final cancelled = await _databaseService.cancelInactiveSubscriptions();
+      if (cancelled > 0) {
+        debugPrint('[SubscriptionBloc] Auto-cancelled $cancelled inactive subscriptions');
+      }
       final subscriptions = await _databaseService.getAllSubscriptions();
       final totalSpending = await _databaseService.getTotalMonthlySpending();
       debugPrint('[SubscriptionBloc] Loaded ${subscriptions.length} subscriptions');
@@ -158,6 +162,11 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
         final subscription = parsed.toSubscription();
         await _databaseService.insertSubscription(subscription);
         debugPrint('[SubscriptionBloc] Added: ${parsed.serviceName} - ${parsed.amount ?? 0} ${parsed.currency ?? ""}');
+      }
+
+      final cancelledCount = await _databaseService.cancelInactiveSubscriptions();
+      if (cancelledCount > 0) {
+        debugPrint('[SubscriptionBloc] Auto-cancelled $cancelledCount inactive subscriptions after sync');
       }
 
       final subscriptions = await _databaseService.getAllSubscriptions();
