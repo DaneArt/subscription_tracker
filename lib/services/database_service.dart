@@ -246,27 +246,49 @@ class DatabaseService {
     );
   }
 
+  Future<List<Subscription>> getCancelledSubscriptions() async {
+    if (kIsWeb) {
+      return _webSubscriptions
+          .where((s) => s.status == SubscriptionStatus.cancelled)
+          .toList();
+    }
+    final db = await database;
+    final maps = await db.query(
+      _tableName,
+      where: 'status = ?',
+      whereArgs: ['cancelled'],
+      orderBy: 'lastPaymentDate DESC, serviceName ASC',
+    );
+    return maps.map((map) => Subscription.fromMap(map)).toList();
+  }
+
+  double _monthlyAmount(Subscription sub) {
+    switch (sub.billingPeriod) {
+      case BillingPeriod.monthly:
+        return sub.amount;
+      case BillingPeriod.yearly:
+        return sub.amount / 12;
+      case BillingPeriod.weekly:
+        return sub.amount * 4.33;
+      case BillingPeriod.unknown:
+        return sub.amount;
+    }
+  }
+
   Future<double> getTotalMonthlySpending() async {
     final subscriptions = await getActiveSubscriptions();
     double total = 0;
     for (final sub in subscriptions) {
-      double monthlyAmount;
-      switch (sub.billingPeriod) {
-        case BillingPeriod.monthly:
-          monthlyAmount = sub.amount;
-          break;
-        case BillingPeriod.yearly:
-          monthlyAmount = sub.amount / 12;
-          break;
-        case BillingPeriod.weekly:
-          monthlyAmount = sub.amount * 4.33;
-          break;
-        case BillingPeriod.unknown:
-          monthlyAmount = sub.amount;
-          break;
-      }
-      // Convert to RUB
-      total += _convertToRub(monthlyAmount, sub.currency);
+      total += _convertToRub(_monthlyAmount(sub), sub.currency);
+    }
+    return total;
+  }
+
+  Future<double> getTotalMonthlySavings() async {
+    final subscriptions = await getCancelledSubscriptions();
+    double total = 0;
+    for (final sub in subscriptions) {
+      total += _convertToRub(_monthlyAmount(sub), sub.currency);
     }
     return total;
   }

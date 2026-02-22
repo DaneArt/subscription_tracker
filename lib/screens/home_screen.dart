@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/blocs.dart';
 import '../widgets/widgets.dart';
 import 'add_subscription_screen.dart';
+import 'cancelled_subscriptions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -96,6 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final active = state.activeSubscriptions;
+          final cancelledCount = state.cancelledSubscriptions.length;
+
           return RefreshIndicator(
             onRefresh: () async {
               context
@@ -108,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 SliverToBoxAdapter(
                   child: TotalSpendingCard(
                     totalMonthly: state.totalMonthlySpending,
-                    subscriptionCount: state.activeSubscriptions.length,
+                    subscriptionCount: active.length,
                   ),
                 ),
                 // Progress indicator
@@ -116,7 +120,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   SliverToBoxAdapter(
                     child: _buildSyncProgressCard(context, state.syncProgress!),
                   ),
-                if (state.subscriptions.isEmpty && !state.isSyncing)
+                if (cancelledCount > 0)
+                  SliverToBoxAdapter(
+                    child: _buildCancelledBanner(
+                      context,
+                      cancelledCount,
+                      state.totalMonthlySavings,
+                    ),
+                  ),
+                if (active.isEmpty && !state.isSyncing)
                   SliverFillRemaining(
                     child: _buildEmptyState(context),
                   )
@@ -124,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final subscription = state.subscriptions[index];
+                        final subscription = active[index];
                         return Dismissible(
                           key: Key('subscription_${subscription.id}'),
                           direction: DismissDirection.endToStart,
@@ -173,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         );
                       },
-                      childCount: state.subscriptions.length,
+                      childCount: active.length,
                     ),
                   ),
                 const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
@@ -186,6 +198,57 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () => _navigateToAddSubscription(context),
         icon: const Icon(Icons.add),
         label: const Text('Добавить'),
+      ),
+    );
+  }
+
+  Widget _buildCancelledBanner(
+    BuildContext context,
+    int count,
+    double totalMonthlySavings,
+  ) {
+    final savingsText = '${totalMonthlySavings.toStringAsFixed(0)} \u20BD/мес';
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      color: Colors.green.shade50,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const CancelledSubscriptionsScreen(),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.savings_outlined, color: Colors.green.shade700),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Отменённые подписки: $count',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.green.shade900,
+                          ),
+                    ),
+                    Text(
+                      'Экономия: $savingsText',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.green.shade700,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.green.shade700),
+            ],
+          ),
+        ),
       ),
     );
   }
