@@ -75,3 +75,68 @@ SQLite with `subscriptions` table. Schema migrations handled in `DatabaseService
 Gmail read-only scope required. Credentials configured via:
 - Android: `google-services.json`
 - iOS: `GoogleService-Info.plist`
+
+## Integration Tests (Email Parser)
+
+Tests that verify the email parsing pipeline against real email data.
+
+### Running integration tests
+
+```bash
+# Run all integration tests
+flutter test test/email_parser_integration_test.dart
+
+# Run all tests (unit + integration)
+flutter test
+```
+
+### Email fixture format
+
+Place JSON files in `test/fixtures/`. Each file is an array of email objects:
+
+```json
+[
+  {
+    "id": "unique_email_id",
+    "from": "sender@example.com",
+    "subject": "Email subject",
+    "body": "<html>...</html>",
+    "date": "2026-02-15T10:30:00Z",
+    "snippet": "Preview text"
+  }
+]
+```
+
+### Adding your own email data
+
+**Option 1: Export during sync** — pass `exportPath` to `SubscriptionSyncRequested`:
+```dart
+add(SubscriptionSyncRequested(exportPath: '/path/to/save/'));
+```
+This saves all fetched emails as `email_dump_{timestamp}.json`.
+
+**Option 2: Manual** — copy emails into a JSON file following the format above. Place it at `test/fixtures/my_emails.json`.
+
+### Snapshot testing (regression detection)
+
+On first run, tests auto-generate `*_snapshot.json` files with parser results. Subsequent runs compare against these baselines.
+
+To regenerate snapshots after intentional parser changes:
+```bash
+# Delete old snapshots
+rm test/fixtures/*_snapshot.json
+
+# Re-run tests (regenerates snapshots)
+flutter test test/email_parser_integration_test.dart
+
+# Or use the standalone script
+dart test/generate_snapshot.dart
+```
+
+### Files
+
+- `test/fixtures/sample_emails.json` — example fixture with 10 test emails
+- `test/fixtures/sample_emails_expected.json` — expected results for sample emails
+- `test/email_parser_integration_test.dart` — integration test suite
+- `test/generate_snapshot.dart` — standalone snapshot generator
+- `lib/services/email_export_service.dart` — email export utility

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "test_netflix_001",
+    "from": "info@account.netflix.com",
+    "subject": "Ваш чек за подписку Netflix",
+    "body": "<html><body><p>Здравствуйте! Спасибо за подписку Netflix.</p><p>Сумма оплаты: 399 ₽</p><p>Следующее списание: 15.03.2026</p><p>Тариф: Стандартный</p></body></html>",
+    "date": "2026-02-15T10:30:00Z",
+    "snippet": "Спасибо за подписку Netflix. Сумма оплаты: 399 ₽"
+  },
+  {
+    "id": "test_spotify_001",
+    "from": "no-reply@spotify.com",
+    "subject": "Your Spotify Premium receipt",
+    "body": "<html><body><p>Thanks for your Spotify Premium subscription.</p><p>Amount charged: $9.99</p><p>Billing period: Monthly</p><p>Next billing date: 2026-03-20</p></body></html>",
+    "date": "2026-02-20T14:00:00Z",
+    "snippet": "Thanks for your Spotify Premium subscription. Amount charged: $9.99"
+  },
+  {
+    "id": "test_youtube_001",
+    "from": "payments-noreply@google.com",
+    "subject": "Your Google Play order receipt",
+    "body": "<html><body><p>YouTube Premium</p><p>Ежемесячная подписка</p><p>Оплата: 299 ₽</p><p>Дата следующего списания: 01.03.2026</p></body></html>",
+    "date": "2026-02-01T08:00:00Z",
+    "snippet": "YouTube Premium Ежемесячная подписка Оплата: 299 ₽"
+  },
+  {
+    "id": "test_apple_receipt_001",
+    "from": "no_reply@email.apple.com",
+    "subject": "Your receipt from Apple",
+    "body": "<html><body><p>Apple ID: user@example.com</p><p>Account: user@example.com</p><p>ChatGPT Plus</p><p>OpenAI (Monthly) 19,99 €</p><p>Total: 19,99 €</p></body></html>",
+    "date": "2026-02-10T12:00:00Z",
+    "snippet": "ChatGPT Plus OpenAI (Monthly) 19,99 €"
+  },
+  {
+    "id": "test_bank_sms_001",
+    "from": "user@gmail.com",
+    "subject": "Fwd: SMS from bank",
+    "body": "<html><body><div>Koriscenje kartice</div><div>Datum: 17.02.2026 15:45:39</div><div>Iznos: 819,00 RSD</div><div>Raspolozivo: 50.000,00 RSD</div><div>Mesto: GOOGLE *YouTubePremium g.co/HelpPay#US</div></body></html>",
+    "date": "2026-02-17T15:45:00Z",
+    "snippet": "Koriscenje kartice Datum: 17.02.2026 Iznos: 819,00 RSD Mesto: GOOGLE *YouTubePremium"
+  },
+  {
+    "id": "test_cancelled_001",
+    "from": "info@account.netflix.com",
+    "subject": "Your Netflix subscription has been cancelled",
+    "body": "<html><body><p>Your Netflix subscription has been cancelled. You can continue to watch until 15.03.2026.</p><p>Amount: 399 ₽</p></body></html>",
+    "date": "2026-02-18T09:00:00Z",
+    "snippet": "Your Netflix subscription has been cancelled. You can continue to watch until 15.03.2026."
+  },
+  {
+    "id": "test_promo_skip_001",
+    "from": "info@account.netflix.com",
+    "subject": "New on Netflix: Top picks for you",
+    "body": "<html><body><p>Check out what's new on Netflix! Because you watched Stranger Things, we recommend...</p></body></html>",
+    "date": "2026-02-19T11:00:00Z",
+    "snippet": "Check out what's new on Netflix! Because you watched Stranger Things"
+  },
+  {
+    "id": "test_yandex_plus_001",
+    "from": "plus@passport.yandex.ru",
+    "subject": "Подписка Яндекс Плюс продлена",
+    "body": "<html><body><p>Здравствуйте!</p><p>Ваша подписка Яндекс Плюс успешно продлена.</p><p>Списано: 299 ₽</p><p>Следующее списание: 15.03.2026</p></body></html>",
+    "date": "2026-02-15T07:00:00Z",
+    "snippet": "Ваша подписка Яндекс Плюс успешно продлена. Списано: 299 ₽"
+  },
+  {
+    "id": "test_nordvpn_001",
+    "from": "billing@nordvpn.com",
+    "subject": "NordVPN payment receipt",
+    "body": "<html><body><p>Your NordVPN subscription payment has been received.</p><p>Amount: $11.99</p><p>Plan: Monthly</p><p>Next payment: 2026-03-15</p></body></html>",
+    "date": "2026-02-15T16:00:00Z",
+    "snippet": "Your NordVPN subscription payment has been received. Amount: $11.99"
+  },
+  {
+    "id": "test_github_actions_skip_001",
+    "from": "notifications@github.com",
+    "subject": "Run failed: CI pipeline",
+    "body": "<html><body><p>Workflow run failed for branch main.</p></body></html>",
+    "date": "2026-02-20T10:00:00Z",
+    "snippet": "Workflow run failed for branch main"
+  }
+]

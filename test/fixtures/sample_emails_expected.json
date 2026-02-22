@@ -1,0 +1,84 @@
+[
+  {
+    "emailId": "test_netflix_001",
+    "serviceName": "Netflix",
+    "amount": 399.0,
+    "currency": "RUB",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_spotify_001",
+    "serviceName": "Spotify",
+    "amount": 9.99,
+    "currency": "USD",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_youtube_001",
+    "serviceName": "YouTube Premium",
+    "amount": 299.0,
+    "currency": "RUB",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_apple_receipt_001",
+    "serviceName": "ChatGPT Plus",
+    "amount": 19.99,
+    "currency": "EUR",
+    "billingPeriod": "monthly",
+    "category": "software",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_bank_sms_001",
+    "serviceName": "YouTube Premium",
+    "amount": 819.0,
+    "currency": "RSD",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_cancelled_001",
+    "serviceName": "Netflix",
+    "amount": 399.0,
+    "currency": "RUB",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": true
+  },
+  {
+    "emailId": "test_promo_skip_001",
+    "_comment": "Should be skipped (promo email)",
+    "shouldSkip": true
+  },
+  {
+    "emailId": "test_yandex_plus_001",
+    "serviceName": "Яндекс Плюс",
+    "amount": 299.0,
+    "currency": "RUB",
+    "billingPeriod": "monthly",
+    "category": "streaming",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_nordvpn_001",
+    "serviceName": "NordVPN",
+    "amount": 11.99,
+    "currency": "USD",
+    "billingPeriod": "monthly",
+    "category": "vpn",
+    "isCancelled": false
+  },
+  {
+    "emailId": "test_github_actions_skip_001",
+    "_comment": "Should be skipped (CI notification)",
+    "shouldSkip": true
+  }
+]

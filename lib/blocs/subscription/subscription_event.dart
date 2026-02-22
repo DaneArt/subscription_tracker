@@ -14,7 +14,13 @@ class SubscriptionLoadRequested extends SubscriptionEvent {
 }
 
 class SubscriptionSyncRequested extends SubscriptionEvent {
-  const SubscriptionSyncRequested();
+  /// Optional path to export raw emails as JSON for integration testing.
+  final String? exportPath;
+
+  const SubscriptionSyncRequested({this.exportPath});
+
+  @override
+  List<Object?> get props => [exportPath];
 }
 
 class SubscriptionAdded extends SubscriptionEvent {
