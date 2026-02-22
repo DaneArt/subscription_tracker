@@ -41,11 +41,13 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       }
       final subscriptions = await _databaseService.getAllSubscriptions();
       final totalSpending = await _databaseService.getTotalMonthlySpending();
+      final totalSavings = await _databaseService.getTotalMonthlySavings();
       debugPrint('[SubscriptionBloc] Loaded ${subscriptions.length} subscriptions');
       emit(state.copyWith(
         status: SubscriptionLoadStatus.success,
         subscriptions: subscriptions,
         totalMonthlySpending: totalSpending,
+        totalMonthlySavings: totalSavings,
       ));
     } catch (e) {
       debugPrint('[SubscriptionBloc] Error loading: $e');
@@ -180,6 +182,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
 
       final subscriptions = await _databaseService.getAllSubscriptions();
       final totalSpending = await _databaseService.getTotalMonthlySpending();
+      final totalSavings = await _databaseService.getTotalMonthlySavings();
 
       debugPrint('[SubscriptionBloc] Sync complete. Subscriptions: ${subscriptions.length}');
       emit(state.copyWith(
@@ -187,6 +190,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
         syncProgress: null,
         subscriptions: subscriptions,
         totalMonthlySpending: totalSpending,
+        totalMonthlySavings: totalSavings,
         status: SubscriptionLoadStatus.success,
       ));
     } catch (e) {
