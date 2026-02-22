@@ -136,6 +136,8 @@ class GmailService {
       'invoice',
       'receipt',
       'чек',
+      // Bank SMS forwarding keywords (Serbian)
+      'koriscenje kartice',
     ];
 
     // Also search by sender for known subscription services
