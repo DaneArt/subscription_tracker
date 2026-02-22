@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/blocs.dart';
 import '../widgets/widgets.dart';
-import 'add_subscription_screen.dart';
 import 'cancelled_subscriptions_screen.dart';
+import 'subscription_calendar_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -195,9 +195,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToAddSubscription(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Добавить'),
+        onPressed: () => _navigateToCalendar(context),
+        icon: const Icon(Icons.calendar_month),
+        label: const Text('Календарь'),
       ),
     );
   }
@@ -351,10 +351,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _navigateToAddSubscription(BuildContext context) {
+  void _navigateToCalendar(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => const AddSubscriptionScreen(),
+        builder: (context) => const SubscriptionCalendarScreen(),
       ),
     );
   }

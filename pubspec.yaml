@@ -52,6 +52,9 @@ dependencies:
   cached_network_image: ^3.3.1
   html: ^0.15.4
 
+  # Calendar
+  table_calendar: ^3.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
