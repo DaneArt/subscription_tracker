@@ -96,6 +96,15 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
 
       debugPrint('[SubscriptionBloc] Found ${emails.length} emails');
 
+      // Export raw emails for integration testing if exportPath is provided
+      if (event.exportPath != null) {
+        debugPrint('[SubscriptionBloc] Exporting emails to ${event.exportPath}...');
+        await EmailExportService.exportToJson(
+          emails: emails,
+          directory: event.exportPath!,
+        );
+      }
+
       emit(state.copyWith(
         syncProgress: SyncProgress(
           totalFound: emails.length,

@@ -54,3 +54,9 @@ local.properties
 .env
 .env.*
 secrets/
+
+# Test fixtures - user email dumps (may contain personal data)
+test/fixtures/my_emails.json
+test/fixtures/my_emails_snapshot.json
+test/fixtures/email_dump_*.json
+test/fixtures/email_dump_*_snapshot.json
