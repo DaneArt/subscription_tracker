@@ -208,6 +208,25 @@ class EmailParserService {
 
     debugPrint('[EmailParser] Bank SMS merchant: $merchantRaw');
 
+    // Exclude known e-commerce / non-subscription merchants
+    final merchantLower = merchantRaw.toLowerCase();
+    const excludedMerchants = [
+      'temu.com',
+      'temu ',
+      'aliexpress',
+      'shein',
+      'wish.com',
+      'amazon',
+      'ebay',
+    ];
+    for (final excluded in excludedMerchants) {
+      if (merchantLower.contains(excluded)) {
+        debugPrint('[EmailParser] ❌ Excluded non-subscription merchant: $merchantRaw');
+        debugPrint('═══════════════════════════════════════════════════════════');
+        return null;
+      }
+    }
+
     // Map merchant to known service
     // Merchant examples: "GOOGLE *YouTubePremium g.co/HelpPay#US", "NETFLIX.COM g.co/HelpPay#NL"
     final merchantNormalized = merchantRaw.toLowerCase().replaceAll(RegExp(r'[\s*._]+'), '');
