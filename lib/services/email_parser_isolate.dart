@@ -63,16 +63,26 @@ class ParsedEmailResult {
 
   Subscription toSubscription() {
     final now = DateTime.now();
+    final lastPayment = lastPaymentDateIso != null ? DateTime.tryParse(lastPaymentDateIso!) : null;
+    DateTime? nextBilling = billingDateIso != null ? DateTime.tryParse(billingDateIso!) : null;
+
+    final billingPeriodEnum = BillingPeriod.values.firstWhere(
+      (e) => e.name == billingPeriod,
+      orElse: () => BillingPeriod.monthly,
+    );
+
+    // If next billing date is missing or not after last payment, calculate it
+    if (lastPayment != null && (nextBilling == null || !nextBilling.isAfter(lastPayment))) {
+      nextBilling = _calculateNextBillingDate(lastPayment, billingPeriodEnum);
+    }
+
     return Subscription(
       serviceName: serviceName,
       amount: amount ?? 0,
       currency: currency ?? 'RUB',
-      nextBillingDate: billingDateIso != null ? DateTime.tryParse(billingDateIso!) : null,
-      lastPaymentDate: lastPaymentDateIso != null ? DateTime.tryParse(lastPaymentDateIso!) : null,
-      billingPeriod: BillingPeriod.values.firstWhere(
-        (e) => e.name == billingPeriod,
-        orElse: () => BillingPeriod.monthly,
-      ),
+      nextBillingDate: nextBilling,
+      lastPaymentDate: lastPayment,
+      billingPeriod: billingPeriodEnum,
       status: isCancelled ? SubscriptionStatus.cancelled : SubscriptionStatus.active,
       category: SubscriptionCategory.values.firstWhere(
         (e) => e.name == category,
@@ -616,4 +626,23 @@ String? _extractPaymentExcerpt(String text, (double, String)? amount) {
   }
 
   return null;
+}
+
+/// Calculates the next billing date from the last payment date and billing period.
+DateTime _calculateNextBillingDate(DateTime lastPayment, BillingPeriod period) {
+  switch (period) {
+    case BillingPeriod.weekly:
+      return lastPayment.add(const Duration(days: 7));
+    case BillingPeriod.yearly:
+      return DateTime(lastPayment.year + 1, lastPayment.month, lastPayment.day);
+    case BillingPeriod.monthly:
+    case BillingPeriod.unknown:
+      final nextMonth = lastPayment.month + 1;
+      final year = nextMonth > 12 ? lastPayment.year + 1 : lastPayment.year;
+      final month = nextMonth > 12 ? 1 : nextMonth;
+      // Clamp day to last day of target month
+      final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+      final day = lastPayment.day > lastDayOfMonth ? lastDayOfMonth : lastPayment.day;
+      return DateTime(year, month, day);
+  }
 }
