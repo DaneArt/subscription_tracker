@@ -224,12 +224,27 @@ bool _isBankSmsForward(EmailDataSimple email) {
          (text.contains('iznos:') && text.contains('mesto:'));
 }
 
+/// Extracts text from bank SMS email, replacing HTML block elements with
+/// newlines to preserve field separation (Iznos, Raspolozivo, Mesto, etc.)
+String _extractBankSmsText(EmailDataSimple email) {
+  final body = email.body ?? '';
+  final withNewlines = body
+      .replaceAll(RegExp(r'<br\s*/?>|</div>|</p>|</tr>|</li>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]*>'), ' ');
+  final parts = [
+    email.subject ?? '',
+    email.snippet ?? '',
+    withNewlines,
+  ];
+  return parts.join('\n');
+}
+
 ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
-  final textContent = _extractTextContent(email);
+  final textContent = _extractBankSmsText(email);
 
   // Extract amount from "Iznos: 1.099,00 RSD" or "Iznos: 819,00 RSD"
   final amountMatch = RegExp(
-    r'iznos:\s*([\d.]+,\d{2})\s*(\w+)',
+    r'iznos:\s*([\d.]+,\d{2})\s*([A-Za-z]{3})\b',
     caseSensitive: false,
   ).firstMatch(textContent);
 
