@@ -61,9 +61,13 @@ class EmailParserService {
     // Subscription management/tracker alert emails (not actual receipts)
     'subscription alert', 'upcoming subscription', 'subscriptions this week',
     'upcoming subscriptions', 'cancel unwanted', 'your concierge',
+    // Win-back / re-engagement marketing emails
+    'come back', 'we miss you', 'we want you back', 'miss you',
+    'give us another', 'rejoin', 'return to',
+    'вернитесь', 'мы скучаем', 'ждём вас',
     // Discount/deal promotional emails
     'deal ends', '% off', 'off annual', 'off premium',
-    'special offer', 'limited time',
+    'special offer', 'limited time', 'for just',
     'скидка', 'акция', 'специальное предложение',
     // CI/development notification emails (not billing)
     'run failed', 'run succeeded', 'workflow run',
@@ -353,10 +357,19 @@ class EmailParserService {
     debugPrint('───────────────────────────────────────────────────────────');
 
     final amountResult = _extractAmountSmart(textContent, knownService);
+    final isCancelled = _isCancelledSubscription(textContent, email.subject ?? '');
+
+    // Skip cancellation/expiration-only emails with no payment amount
+    // (e.g., "Your Obsidian Sync has expired" with no charge)
+    if (isCancelled && amountResult == null) {
+      debugPrint('[EmailParser] ❌ Cancellation/expiration email with no amount - skipping');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      return null;
+    }
+
     final billingDate = _extractBillingDate(textContent);
     final billingPeriod = _extractBillingPeriod(textContent);
     final emailExcerpt = _extractPaymentExcerpt(textContent, amountResult);
-    final isCancelled = _isCancelledSubscription(textContent, email.subject ?? '');
     final lastPaymentDate = _extractLastPaymentDate(email.date);
 
     debugPrint('[EmailParser] RESULT: ${knownService.name}');
