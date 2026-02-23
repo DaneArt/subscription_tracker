@@ -39,8 +39,8 @@ lib/
 ├── blocs/           # AuthBloc, SubscriptionBloc - state management
 ├── models/          # Data models (Subscription, EmailData, KnownServices)
 ├── services/        # AuthService, GmailService, EmailParserService, DatabaseService
-├── screens/         # UI pages (auth, home, add_subscription)
-└── widgets/         # Reusable components (subscription_card, detail_sheet)
+├── screens/         # UI pages (auth, home, add_subscription, cancelled_subscriptions)
+└── widgets/         # Reusable components (subscription_card, detail_sheet, total_spending_card)
 ```
 
 **Data Flow:**
@@ -68,7 +68,7 @@ UI Event → BLoC Event → Service → Database → New State → UI Rebuild
 
 ## Database
 
-SQLite with `subscriptions` table. Schema migrations handled in `DatabaseService._upgradeDb()`. Currently at version 3.
+SQLite with `subscriptions` table. Schema migrations handled in `DatabaseService._upgradeDb()`. Currently at version 4.
 
 ## Authentication
 
