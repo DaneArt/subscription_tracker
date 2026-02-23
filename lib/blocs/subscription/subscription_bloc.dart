@@ -141,21 +141,43 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       debugPrint('[SubscriptionBloc] Parsed ${allParsed.length} subscriptions from emails');
 
       // Deduplicate: keep the most recent email per service
+      // Use normalized key (lowercase, no spaces/hyphens) to catch variations
+      // like "YouTube Premium" vs "Youtubepremium" from different parsing paths
       final serviceMap = <String, ParsedEmailResult>{};
       for (final parsed in allParsed) {
-        final existing = serviceMap[parsed.serviceName];
+        final key = _normalizeServiceKey(parsed.serviceName);
+        final existing = serviceMap[key];
         if (existing == null) {
-          serviceMap[parsed.serviceName] = parsed;
+          serviceMap[key] = parsed;
         } else {
           // Keep the one with more info (amount, later date)
+          // Also prefer canonical (known service) names over cleaned merchant names
           final existingDate = existing.lastPaymentDateIso != null
               ? DateTime.tryParse(existing.lastPaymentDateIso!)
               : null;
           final newDate = parsed.lastPaymentDateIso != null
               ? DateTime.tryParse(parsed.lastPaymentDateIso!)
               : null;
-          if (newDate != null && (existingDate == null || newDate.isAfter(existingDate))) {
-            serviceMap[parsed.serviceName] = parsed;
+          final newIsNewer = newDate != null && (existingDate == null || newDate.isAfter(existingDate));
+          final newHasAmount = parsed.amount != null && (existing.amount == null);
+          if (newIsNewer || newHasAmount) {
+            // Prefer the canonical service name (contains spaces = likely from known service)
+            final preferExistingName = existing.serviceName.contains(' ') && !parsed.serviceName.contains(' ');
+            serviceMap[key] = preferExistingName
+                ? ParsedEmailResult(
+                    serviceName: existing.serviceName,
+                    amount: parsed.amount ?? existing.amount,
+                    currency: parsed.currency ?? existing.currency,
+                    billingDateIso: parsed.billingDateIso ?? existing.billingDateIso,
+                    lastPaymentDateIso: parsed.lastPaymentDateIso ?? existing.lastPaymentDateIso,
+                    billingPeriod: parsed.billingPeriod,
+                    category: existing.category,
+                    isCancelled: parsed.isCancelled,
+                    emailId: parsed.emailId,
+                    emailSubject: parsed.emailSubject ?? existing.emailSubject,
+                    emailExcerpt: parsed.emailExcerpt ?? existing.emailExcerpt,
+                  )
+                : parsed;
           }
         }
       }
@@ -256,6 +278,12 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
+  }
+
+  /// Normalizes service name for deduplication.
+  /// Handles variations like "YouTube Premium" vs "Youtubepremium".
+  static String _normalizeServiceKey(String name) {
+    return name.toLowerCase().replaceAll(RegExp(r'[\s\-_]+'), '');
   }
 
 }

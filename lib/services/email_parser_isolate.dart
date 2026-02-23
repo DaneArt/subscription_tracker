@@ -316,6 +316,27 @@ ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
     if (matchedService != null) break;
   }
 
+  // Secondary pass: match by primary keyword from service name
+  // Handles cases like "GOOGLE *YouTube" → "YouTube Premium"
+  if (matchedService == null) {
+    // Remove common prefixes (GOOGLE *, Apple *, etc.)
+    final cleanedMerchant = merchantNormalized
+        .replaceAll(RegExp(r'^(google|apple)'), '');
+    for (final service in knownServices) {
+      final words = service.name.toLowerCase().split(' ');
+      // Use the most distinctive word (skip generic words)
+      for (final word in words) {
+        if (word.length >= 4 &&
+            !const {'plus', 'music', 'cloud', 'sync'}.contains(word) &&
+            cleanedMerchant.contains(word)) {
+          matchedService = service;
+          break;
+        }
+      }
+      if (matchedService != null) break;
+    }
+  }
+
   final serviceName = matchedService?.name ?? _cleanMerchantName(merchantRaw);
   final category = matchedService?.category.name ?? 'other';
   final isCancelled = merchantRaw.toLowerCase().contains('cancel');
