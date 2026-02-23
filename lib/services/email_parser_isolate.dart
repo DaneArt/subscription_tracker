@@ -131,9 +131,13 @@ const _promoKeywords = [
   // Subscription management/tracker alert emails (not actual receipts)
   'subscription alert', 'upcoming subscription', 'subscriptions this week',
   'upcoming subscriptions', 'cancel unwanted', 'your concierge',
+  // Win-back / re-engagement marketing emails
+  'come back', 'we miss you', 'we want you back', 'miss you',
+  'give us another', 'rejoin', 'return to',
+  'вернитесь', 'мы скучаем', 'ждём вас',
   // Discount/deal promotional emails
   'deal ends', '% off', 'off annual', 'off premium',
-  'special offer', 'limited time',
+  'special offer', 'limited time', 'for just',
   'скидка', 'акция', 'специальное предложение',
   // CI/development notification emails (not billing)
   'run failed', 'run succeeded', 'workflow run',
@@ -170,10 +174,16 @@ ParsedEmailResult? _parseEmailInIsolate(EmailDataSimple email) {
 
   final textContent = _extractTextContent(email);
   final amountResult = _extractAmount(textContent, knownService);
+  final isCancelled = _isCancelledSubscription(textContent, email.subject ?? '');
+
+  // Skip cancellation/expiration-only emails with no payment amount
+  if (isCancelled && amountResult == null) {
+    return null;
+  }
+
   final billingDate = _extractBillingDate(textContent);
   final billingPeriod = _extractBillingPeriod(textContent);
   final emailExcerpt = _extractPaymentExcerpt(textContent, amountResult);
-  final isCancelled = _isCancelledSubscription(textContent, email.subject ?? '');
 
   return ParsedEmailResult(
     serviceName: knownService.name,
@@ -295,6 +305,23 @@ ParsedEmailResult? _parseBankSms(EmailDataSimple email) {
   final merchantRaw = merchantMatch?.group(1)?.trim();
 
   if (merchantRaw == null) return null;
+
+  // Exclude known e-commerce / non-subscription merchants
+  final merchantLower = merchantRaw.toLowerCase();
+  const excludedMerchants = [
+    'temu.com',
+    'temu ',
+    'aliexpress',
+    'shein',
+    'wish.com',
+    'amazon',
+    'ebay',
+  ];
+  for (final excluded in excludedMerchants) {
+    if (merchantLower.contains(excluded)) {
+      return null;
+    }
+  }
 
   // Map merchant to known service
   final merchantNormalized = merchantRaw.toLowerCase().replaceAll(RegExp(r'[\s*._]+'), '');
