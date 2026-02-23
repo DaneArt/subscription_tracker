@@ -47,6 +47,9 @@ dependencies:
   sqflite: ^2.3.3
   path: ^1.9.0
 
+  # Local storage (web caching)
+  shared_preferences: ^2.2.3
+
   # Utils
   intl: ^0.19.0
   cached_network_image: ^3.3.1
