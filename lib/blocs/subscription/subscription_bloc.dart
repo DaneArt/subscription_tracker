@@ -140,46 +140,13 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
 
       debugPrint('[SubscriptionBloc] Parsed ${allParsed.length} subscriptions from emails');
 
-      // Deduplicate: keep the most recent email per (service + amount).
-      // Same service with different amounts = different subscriptions
-      // (e.g. YouTube Premium personal $11.99 + family $17.99).
-      // Same service with same amount = same subscription, keep newest.
-      // Normalized key handles name variations ("YouTube Premium" vs "Youtubepremium").
-      final serviceMap = <String, ParsedEmailResult>{};
-      for (final parsed in allParsed) {
-        final key = _deduplicationKey(parsed);
-        final existing = serviceMap[key];
-        if (existing == null) {
-          serviceMap[key] = parsed;
-        } else {
-          // Same subscription — keep the most recent payment
-          final existingDate = existing.lastPaymentDateIso != null
-              ? DateTime.tryParse(existing.lastPaymentDateIso!)
-              : null;
-          final newDate = parsed.lastPaymentDateIso != null
-              ? DateTime.tryParse(parsed.lastPaymentDateIso!)
-              : null;
-          if (newDate != null && (existingDate == null || newDate.isAfter(existingDate))) {
-            // Prefer canonical (known service) name when available
-            final bestName = _preferCanonicalName(existing.serviceName, parsed.serviceName);
-            serviceMap[key] = ParsedEmailResult(
-              serviceName: bestName,
-              amount: parsed.amount ?? existing.amount,
-              currency: parsed.currency ?? existing.currency,
-              billingDateIso: parsed.billingDateIso ?? existing.billingDateIso,
-              lastPaymentDateIso: parsed.lastPaymentDateIso ?? existing.lastPaymentDateIso,
-              billingPeriod: parsed.billingPeriod,
-              category: parsed.category,
-              isCancelled: parsed.isCancelled,
-              emailId: parsed.emailId,
-              emailSubject: parsed.emailSubject ?? existing.emailSubject,
-              emailExcerpt: parsed.emailExcerpt ?? existing.emailExcerpt,
-            );
-          }
-        }
-      }
+      // Deduplicate parsed results into distinct subscriptions.
+      // Two payments for the same service in the same month on different
+      // dates = two separate subscriptions (e.g. personal + family plan).
+      // Payments in different months = recurring charges for one subscription.
+      final deduped = _deduplicateSubscriptions(allParsed);
 
-      debugPrint('[SubscriptionBloc] Unique services: ${serviceMap.length}');
+      debugPrint('[SubscriptionBloc] Unique subscriptions: ${deduped.length}');
 
       // Update subscriptions in database
       emit(state.copyWith(
@@ -188,7 +155,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
 
       await _databaseService.deleteAllSubscriptions();
 
-      for (final parsed in serviceMap.values) {
+      for (final parsed in deduped) {
         final subscription = parsed.toSubscription();
         await _databaseService.insertSubscription(subscription);
         debugPrint('[SubscriptionBloc] Added: ${parsed.serviceName} - ${parsed.amount ?? 0} ${parsed.currency ?? ""}');
@@ -277,22 +244,127 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     }
   }
 
-  /// Builds a deduplication key from service name + amount + currency.
-  /// Same service with different amounts = different subscriptions.
-  /// Normalized name handles variations like "YouTube Premium" vs "Youtubepremium".
-  static String _deduplicationKey(ParsedEmailResult parsed) {
-    final name = parsed.serviceName.toLowerCase().replaceAll(RegExp(r'[\s\-_]+'), '');
-    final amount = parsed.amount?.toStringAsFixed(2) ?? 'unknown';
-    final currency = (parsed.currency ?? '').toLowerCase();
-    return '${name}_${amount}_$currency';
+  /// Detects distinct subscriptions from a flat list of parsed emails.
+  ///
+  /// Logic: group by normalized service name, then check how many payments
+  /// fall on different dates within the same calendar month. If a single
+  /// month has N distinct payment dates for one service, that means the
+  /// user has N concurrent subscriptions (e.g. personal + family plan).
+  /// Payments across different months are recurring charges for the same
+  /// subscription and get merged (keep the newest).
+  static List<ParsedEmailResult> _deduplicateSubscriptions(
+    List<ParsedEmailResult> allParsed,
+  ) {
+    // 1. Group by normalized service name
+    final groups = <String, List<ParsedEmailResult>>{};
+    for (final p in allParsed) {
+      final key = p.serviceName.toLowerCase().replaceAll(RegExp(r'[\s\-_]+'), '');
+      groups.putIfAbsent(key, () => []).add(p);
+    }
+
+    final result = <ParsedEmailResult>[];
+
+    for (final entries in groups.values) {
+      // Prefer the canonical name (from known services, usually has spaces)
+      final canonicalName = entries
+          .map((e) => e.serviceName)
+          .firstWhere((n) => n.contains(' '), orElse: () => entries.first.serviceName);
+
+      // 2. Group by calendar month
+      final byMonth = <String, List<ParsedEmailResult>>{};
+      for (final e in entries) {
+        final d = e.lastPaymentDateIso != null
+            ? DateTime.tryParse(e.lastPaymentDateIso!)
+            : null;
+        final mk = d != null
+            ? '${d.year}-${d.month.toString().padLeft(2, '0')}'
+            : 'unknown';
+        byMonth.putIfAbsent(mk, () => []).add(e);
+      }
+
+      // 3. Count distinct payment dates per month → max = subscription count
+      int subscriptionCount = 1;
+      String? anchorMonth;
+      for (final me in byMonth.entries) {
+        final uniqueDates = me.value.map((e) {
+          final d = e.lastPaymentDateIso != null
+              ? DateTime.tryParse(e.lastPaymentDateIso!)
+              : null;
+          return d != null ? '${d.year}-${d.month}-${d.day}' : null;
+        }).whereType<String>().toSet();
+        if (uniqueDates.length > subscriptionCount) {
+          subscriptionCount = uniqueDates.length;
+          anchorMonth = me.key;
+        }
+      }
+
+      // Sort all entries newest-first
+      entries.sort((a, b) =>
+          (b.lastPaymentDateIso ?? '').compareTo(a.lastPaymentDateIso ?? ''));
+
+      if (subscriptionCount <= 1) {
+        // Single subscription — just keep the newest entry
+        result.add(_withName(entries.first, canonicalName));
+      } else {
+        // Multiple concurrent subscriptions detected.
+        // Use entries from the anchor month as subscription "slots",
+        // then for each slot find the newest payment across all months
+        // matching by similar amount (±30 %).
+        final anchors = <ParsedEmailResult>[];
+        final seenDates = <String>{};
+        for (final e in byMonth[anchorMonth]!) {
+          final d = e.lastPaymentDateIso != null
+              ? DateTime.tryParse(e.lastPaymentDateIso!)
+              : null;
+          final dk = d != null ? '${d.year}-${d.month}-${d.day}' : 'u${anchors.length}';
+          if (!seenDates.contains(dk)) {
+            seenDates.add(dk);
+            anchors.add(e);
+          }
+        }
+
+        final usedIds = <String>{};
+        for (final anchor in anchors) {
+          final anchorAmount = anchor.amount ?? 0;
+          ParsedEmailResult best = anchor;
+
+          for (final e in entries) {
+            if (usedIds.contains(e.emailId)) continue;
+            final cmp = (e.lastPaymentDateIso ?? '').compareTo(best.lastPaymentDateIso ?? '');
+            if (cmp <= 0) continue; // not newer
+            final eAmount = e.amount ?? 0;
+            if (anchorAmount > 0 && eAmount > 0) {
+              final ratio = eAmount / anchorAmount;
+              if (ratio < 0.7 || ratio > 1.3) continue; // amount mismatch
+            }
+            best = e;
+          }
+
+          usedIds.add(best.emailId);
+          result.add(_withName(best, canonicalName));
+        }
+      }
+    }
+
+    return result;
   }
 
-  /// Prefers the canonical (known service) name over a cleaned merchant name.
-  /// "YouTube Premium" (has space) is more likely canonical than "Youtubepremium".
-  static String _preferCanonicalName(String existing, String incoming) {
-    if (existing.contains(' ') && !incoming.contains(' ')) return existing;
-    if (incoming.contains(' ') && !existing.contains(' ')) return incoming;
-    return incoming; // default to newer
+  /// Returns a copy of [entry] with the given [name].
+  static ParsedEmailResult _withName(ParsedEmailResult entry, String name) {
+    if (entry.serviceName == name) return entry;
+    return ParsedEmailResult(
+      serviceName: name,
+      amount: entry.amount,
+      currency: entry.currency,
+      billingDateIso: entry.billingDateIso,
+      lastPaymentDateIso: entry.lastPaymentDateIso,
+      billingPeriod: entry.billingPeriod,
+      category: entry.category,
+      isCancelled: entry.isCancelled,
+      emailId: entry.emailId,
+      emailSubject: entry.emailSubject,
+      emailExcerpt: entry.emailExcerpt,
+    );
   }
 
 }
