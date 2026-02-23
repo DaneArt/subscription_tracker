@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/subscription.dart';
@@ -7,9 +10,12 @@ class DatabaseService {
   static Database? _database;
   static const String _tableName = 'subscriptions';
 
-  // In-memory storage for web
+  // Web: in-memory cache backed by localStorage
   static final List<Subscription> _webSubscriptions = [];
   static int _webIdCounter = 1;
+  static bool _webInitialized = false;
+  static const String _webStorageKey = 'subscriptions_cache';
+  static const String _webIdCounterKey = 'subscriptions_id_counter';
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -27,6 +33,33 @@ class DatabaseService {
       onCreate: _createDb,
       onUpgrade: _upgradeDb,
     );
+  }
+
+  /// Загружает кеш из localStorage при первом обращении на веб-платформе.
+  Future<void> _ensureWebInitialized() async {
+    if (!kIsWeb || _webInitialized) return;
+    _webInitialized = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    _webIdCounter = prefs.getInt(_webIdCounterKey) ?? 1;
+
+    final jsonString = prefs.getString(_webStorageKey);
+    if (jsonString != null) {
+      final List<dynamic> jsonList = json.decode(jsonString) as List<dynamic>;
+      _webSubscriptions.clear();
+      for (final item in jsonList) {
+        _webSubscriptions
+            .add(Subscription.fromMap(item as Map<String, dynamic>));
+      }
+    }
+  }
+
+  /// Сохраняет текущее состояние подписок в localStorage.
+  Future<void> _saveWebCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = _webSubscriptions.map((s) => s.toMap()).toList();
+    await prefs.setString(_webStorageKey, json.encode(jsonList));
+    await prefs.setInt(_webIdCounterKey, _webIdCounter);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -72,8 +105,10 @@ class DatabaseService {
 
   Future<int> insertSubscription(Subscription subscription) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       final id = _webIdCounter++;
       _webSubscriptions.add(subscription.copyWith(id: id));
+      await _saveWebCache();
       return id;
     }
     final db = await database;
@@ -84,6 +119,7 @@ class DatabaseService {
 
   Future<List<Subscription>> getAllSubscriptions() async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       final sorted = List<Subscription>.from(_webSubscriptions);
       sorted.sort((a, b) {
         final dateCompare = (a.nextBillingDate ?? DateTime(2100))
@@ -103,6 +139,7 @@ class DatabaseService {
 
   Future<List<Subscription>> getActiveSubscriptions() async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       return _webSubscriptions
           .where((s) => s.status == SubscriptionStatus.active)
           .toList();
@@ -119,6 +156,7 @@ class DatabaseService {
 
   Future<Subscription?> getSubscriptionById(int id) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       try {
         return _webSubscriptions.firstWhere((s) => s.id == id);
       } catch (_) {
@@ -137,6 +175,7 @@ class DatabaseService {
 
   Future<Subscription?> getSubscriptionByServiceName(String serviceName) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       try {
         return _webSubscriptions.firstWhere((s) => s.serviceName == serviceName);
       } catch (_) {
@@ -155,9 +194,11 @@ class DatabaseService {
 
   Future<int> updateSubscription(Subscription subscription) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       final index = _webSubscriptions.indexWhere((s) => s.id == subscription.id);
       if (index != -1) {
         _webSubscriptions[index] = subscription;
+        await _saveWebCache();
         return 1;
       }
       return 0;
@@ -173,8 +214,12 @@ class DatabaseService {
 
   Future<int> deleteSubscription(int id) async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       final lengthBefore = _webSubscriptions.length;
       _webSubscriptions.removeWhere((s) => s.id == id);
+      if (_webSubscriptions.length != lengthBefore) {
+        await _saveWebCache();
+      }
       return lengthBefore - _webSubscriptions.length;
     }
     final db = await database;
@@ -187,8 +232,10 @@ class DatabaseService {
 
   Future<int> deleteAllSubscriptions() async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       final count = _webSubscriptions.length;
       _webSubscriptions.clear();
+      await _saveWebCache();
       return count;
     }
     final db = await database;
@@ -217,6 +264,7 @@ class DatabaseService {
     final nowIso = now.toIso8601String();
 
     if (kIsWeb) {
+      await _ensureWebInitialized();
       var count = 0;
       for (var i = 0; i < _webSubscriptions.length; i++) {
         final s = _webSubscriptions[i];
@@ -230,6 +278,9 @@ class DatabaseService {
           );
           count++;
         }
+      }
+      if (count > 0) {
+        await _saveWebCache();
       }
       return count;
     }
@@ -248,6 +299,7 @@ class DatabaseService {
 
   Future<List<Subscription>> getCancelledSubscriptions() async {
     if (kIsWeb) {
+      await _ensureWebInitialized();
       return _webSubscriptions
           .where((s) => s.status == SubscriptionStatus.cancelled)
           .toList();
@@ -294,6 +346,7 @@ class DatabaseService {
   }
 
   Future<void> close() async {
+    if (kIsWeb) return;
     final db = await database;
     await db.close();
     _database = null;
