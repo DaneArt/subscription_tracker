@@ -67,8 +67,8 @@ const knownServices = [
   ),
   KnownService(
     name: 'YouTube Premium',
-    emailPatterns: ['youtube.com', 'payments-noreply@google.com', 'googleplay-noreply@google.com'],
-    subjectPatterns: ['youtube premium', 'youtube music', 'youtube membership', 'подписка youtube', 'your google play order'],
+    emailPatterns: ['youtube.com'],
+    subjectPatterns: ['youtube premium', 'youtube music', 'youtube membership', 'подписка youtube'],
     category: SubscriptionCategory.streaming,
     typicalPrices: {
       'RUB': PriceRange(199, 600),
@@ -146,8 +146,8 @@ const knownServices = [
   ),
   KnownService(
     name: 'Google One',
-    emailPatterns: ['google.com', 'googleone'],
-    subjectPatterns: ['google one', 'google хранилище'],
+    emailPatterns: ['googleone', 'payments-noreply@google.com'],
+    subjectPatterns: ['google one', 'google хранилище', 'google storage'],
     category: SubscriptionCategory.cloud,
     typicalPrices: {
       'RUB': PriceRange(99, 700),
