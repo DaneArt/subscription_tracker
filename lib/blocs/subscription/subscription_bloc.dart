@@ -140,44 +140,41 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
 
       debugPrint('[SubscriptionBloc] Parsed ${allParsed.length} subscriptions from emails');
 
-      // Deduplicate: keep the most recent email per service
-      // Use normalized key (lowercase, no spaces/hyphens) to catch variations
-      // like "YouTube Premium" vs "Youtubepremium" from different parsing paths
+      // Deduplicate: keep the most recent email per (service + amount).
+      // Same service with different amounts = different subscriptions
+      // (e.g. YouTube Premium personal $11.99 + family $17.99).
+      // Same service with same amount = same subscription, keep newest.
+      // Normalized key handles name variations ("YouTube Premium" vs "Youtubepremium").
       final serviceMap = <String, ParsedEmailResult>{};
       for (final parsed in allParsed) {
-        final key = _normalizeServiceKey(parsed.serviceName);
+        final key = _deduplicationKey(parsed);
         final existing = serviceMap[key];
         if (existing == null) {
           serviceMap[key] = parsed;
         } else {
-          // Keep the one with more info (amount, later date)
-          // Also prefer canonical (known service) names over cleaned merchant names
+          // Same subscription — keep the most recent payment
           final existingDate = existing.lastPaymentDateIso != null
               ? DateTime.tryParse(existing.lastPaymentDateIso!)
               : null;
           final newDate = parsed.lastPaymentDateIso != null
               ? DateTime.tryParse(parsed.lastPaymentDateIso!)
               : null;
-          final newIsNewer = newDate != null && (existingDate == null || newDate.isAfter(existingDate));
-          final newHasAmount = parsed.amount != null && (existing.amount == null);
-          if (newIsNewer || newHasAmount) {
-            // Prefer the canonical service name (contains spaces = likely from known service)
-            final preferExistingName = existing.serviceName.contains(' ') && !parsed.serviceName.contains(' ');
-            serviceMap[key] = preferExistingName
-                ? ParsedEmailResult(
-                    serviceName: existing.serviceName,
-                    amount: parsed.amount ?? existing.amount,
-                    currency: parsed.currency ?? existing.currency,
-                    billingDateIso: parsed.billingDateIso ?? existing.billingDateIso,
-                    lastPaymentDateIso: parsed.lastPaymentDateIso ?? existing.lastPaymentDateIso,
-                    billingPeriod: parsed.billingPeriod,
-                    category: existing.category,
-                    isCancelled: parsed.isCancelled,
-                    emailId: parsed.emailId,
-                    emailSubject: parsed.emailSubject ?? existing.emailSubject,
-                    emailExcerpt: parsed.emailExcerpt ?? existing.emailExcerpt,
-                  )
-                : parsed;
+          if (newDate != null && (existingDate == null || newDate.isAfter(existingDate))) {
+            // Prefer canonical (known service) name when available
+            final bestName = _preferCanonicalName(existing.serviceName, parsed.serviceName);
+            serviceMap[key] = ParsedEmailResult(
+              serviceName: bestName,
+              amount: parsed.amount ?? existing.amount,
+              currency: parsed.currency ?? existing.currency,
+              billingDateIso: parsed.billingDateIso ?? existing.billingDateIso,
+              lastPaymentDateIso: parsed.lastPaymentDateIso ?? existing.lastPaymentDateIso,
+              billingPeriod: parsed.billingPeriod,
+              category: parsed.category,
+              isCancelled: parsed.isCancelled,
+              emailId: parsed.emailId,
+              emailSubject: parsed.emailSubject ?? existing.emailSubject,
+              emailExcerpt: parsed.emailExcerpt ?? existing.emailExcerpt,
+            );
           }
         }
       }
@@ -280,10 +277,22 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     }
   }
 
-  /// Normalizes service name for deduplication.
-  /// Handles variations like "YouTube Premium" vs "Youtubepremium".
-  static String _normalizeServiceKey(String name) {
-    return name.toLowerCase().replaceAll(RegExp(r'[\s\-_]+'), '');
+  /// Builds a deduplication key from service name + amount + currency.
+  /// Same service with different amounts = different subscriptions.
+  /// Normalized name handles variations like "YouTube Premium" vs "Youtubepremium".
+  static String _deduplicationKey(ParsedEmailResult parsed) {
+    final name = parsed.serviceName.toLowerCase().replaceAll(RegExp(r'[\s\-_]+'), '');
+    final amount = parsed.amount?.toStringAsFixed(2) ?? 'unknown';
+    final currency = (parsed.currency ?? '').toLowerCase();
+    return '${name}_${amount}_$currency';
+  }
+
+  /// Prefers the canonical (known service) name over a cleaned merchant name.
+  /// "YouTube Premium" (has space) is more likely canonical than "Youtubepremium".
+  static String _preferCanonicalName(String existing, String incoming) {
+    if (existing.contains(' ') && !incoming.contains(' ')) return existing;
+    if (incoming.contains(' ') && !existing.contains(' ')) return incoming;
+    return incoming; // default to newer
   }
 
 }
