@@ -252,6 +252,27 @@ class EmailParserService {
       if (matchedService != null) break;
     }
 
+    // Secondary pass: match by primary keyword from service name
+    // Handles cases like "GOOGLE *YouTube" → "YouTube Premium"
+    if (matchedService == null) {
+      // Remove common prefixes (GOOGLE *, Apple *, etc.)
+      final cleanedMerchant = merchantNormalized
+          .replaceAll(RegExp(r'^(google|apple)'), '');
+      for (final service in knownServices) {
+        final words = service.name.toLowerCase().split(' ');
+        for (final word in words) {
+          if (word.length >= 4 &&
+              !const {'plus', 'music', 'cloud', 'sync'}.contains(word) &&
+              cleanedMerchant.contains(word)) {
+            matchedService = service;
+            debugPrint('[EmailParser] Bank SMS secondary match: ${service.name} via keyword "$word"');
+            break;
+          }
+        }
+        if (matchedService != null) break;
+      }
+    }
+
     // Use merchant name as fallback if no known service matched
     final serviceName = matchedService?.name ?? _cleanMerchantName(merchantRaw);
     final category = matchedService?.category ?? SubscriptionCategory.other;
